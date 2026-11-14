@@ -470,9 +470,13 @@
   var _MATH_WORD_RE = /^(log|ln|sin|cos|tan|sec|csc|cot|lim|max|min|frac|sqrt|cdot|simplify|left|right|text|over|times)$/i;
   var _FRAC_RE = /\\frac\{(?:[^{}]|\{[^{}]*\})*\}\{(?:[^{}]|\{[^{}]*\})*\}/g;
   // Allow letter exponents (a^x) as well as digit / braced powers (a^2, a^{3/2}).
-  var _ALG_TERM = '(?:-?\\d*(?:[A-Za-z](?:\\^\\{[^}]+\\}|\\^[A-Za-z0-9]+|\\d+)*)+|-?\\d+)';
+  // Number bases may carry a power too (3^4, 2^{5}): without it "3^4 = 81" split into
+  // "3^" + math "4 = 81" (DIL review).
+  var _ALG_TERM = '(?:-?\\d*(?:[A-Za-z](?:\\^\\{[^}]+\\}|\\^[A-Za-z0-9]+|\\d+)*)+|-?\\d+(?:\\^\\{[^}]+\\}|\\^-?\\d+)?)';
   var _ALG_ISLAND_RE = new RegExp(_ALG_TERM + '(?:\\s*[+\\-×÷=]\\s*' + _ALG_TERM + ')+', 'g');
-  var _POWER_ISLAND_RE = /[A-Za-z](?:\d+)?(?:\^\{[^}]+\}|\^[A-Za-z0-9]+)(?:\s*=\s*[A-Za-z0-9]+)?/g;
+  // Letter or number base (x^2, 2^{4}): a lone number power was left as a raw "2^{4}".
+  // Never inside a LaTeX argument ("\frac{..}{2^{2}}", "\sqrt[3]{8^{2}}"): a $ there breaks the TeX.
+  var _POWER_ISLAND_RE = /(?:[A-Za-z](?:\d+)?(?:\^\{[^}]+\}|\^[A-Za-z0-9]+)|(?<![{\w^.])\d+(?:\^\{[^}]+\}|\^[A-Za-z0-9]+)(?![^{]*\}))(?:\s*=\s*[A-Za-z0-9]+)?/g;
   // Parenthesized bases with a trailing power: (a+b)^{2}, (3x-2)^2.
   // Letter-only _POWER_ISLAND_RE misses these and left raw "^{2}" in quiz stems.
   var _PAREN_POWER_ISLAND_RE = /\([^()]{0,40}\)\s*\^\s*(?:\{[^{}]+\}|-?\d+|[A-Za-z])/g;
@@ -921,11 +925,14 @@
     // character the repair needs to see.
     var t = lmsRecoverEatenBackslashCommands(String(s || '')).trim();
     if (!t) return '';
+    // Superscripts BEFORE NFKC: NFKC turns "3⁴" into "34", so a tutor reply
+    // "3⁴ = 81" rendered as thirty-four (DIL review). Letters were rescued later
+    // by lmsImplicitExponents (x2 -> x^{2}); number bases were not.
+    t = lmsUnicodeSupersToLatex(t);
     if (t.normalize) t = t.normalize('NFKC');
     t = lmsUnwrapOuterMathIfProse(t);
     t = lmsUnsquashEnglish(t);
     t = t.replace(/−/g, '-');
-    t = lmsUnicodeSupersToLatex(t);
     t = lmsImplicitExponents(t);
     t = lmsRecoverStackedFraction(t);
     // Only promote plain log_a / slash forms outside existing math delims.
@@ -1250,6 +1257,21 @@
   }
 
   /** Wrap recovered LaTeX so MathJax/KaTeX render exponents and fractions. */
+  // A wrapped result is "clean" when no math span holds an English word ("angle
+  // $B = angle$ D") and no delimiters are nested ("$\(\log ...$\)").
+  function lmsIslandsLookClean(s) {
+    if (/\$[^$]*\\\(|\\\([^)]*\$/.test(s)) return false;
+    var clean = true;
+    String(s || '').replace(/\$([^$]+)\$|\\\(([\s\S]*?)\\\)/g, function (m, a, b) {
+      var body = String(a || b || '').replace(/\\[A-Za-z]+/g, ' ');
+      (body.match(/[A-Za-z]{3,}/g) || []).forEach(function (w) {
+        if (!_MATH_WORD_RE.test(w) && !_FUNC_NAMES[w.toLowerCase()]) clean = false;
+      });
+      return m;
+    });
+    return clean;
+  }
+
   function prepareMathText(text, inline) {
     if (text == null) return '';
     // Repair BEFORE trim(): see lmsRecoverLatex for why the order matters.
@@ -1314,6 +1336,17 @@
     // and render the word as italic letters ("3orx"). Wrap each bit instead.
     if (_MATH_CONNECTIVE_RE.test(recovered)) {
       return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(lmsWrapMathIslands(recovered, inline)));
+    }
+    // A short sentence that starts with an English word ("Use log_2 32 = 5.", "So 3^4 = 81.")
+    // is prose with math in it: wrapping the whole line typeset the word as italic letters.
+    // Only when the islands come out clean - otherwise keep the previous behaviour.
+    var lead = recovered.match(/^([A-Za-z]{2,})\s/);
+    if (lead && !_MATH_WORD_RE.test(lead[1]) && !_FUNC_NAMES[lead[1].toLowerCase()]) {
+      var islands = lmsWrapMathIslands(recovered, inline);
+      if (islands !== recovered) {
+        var islanded = lmsInlineParenToDollar(lmsJoinTimesBetweenMath(islands));
+        if (lmsIslandsLookClean(islanded)) return islanded;
+      }
     }
     if (lmsLooksLikeRawLatex(recovered) || lmsLooksLikeMathExpression(recovered) || /\\frac|\^\{/.test(recovered)) {
       var math = lmsEscapePercentInMathBody(recovered);

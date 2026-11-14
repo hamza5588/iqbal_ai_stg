@@ -460,15 +460,25 @@ def _build_scope_queue(
     if len(kept) >= len(ladder):
         return kept[: len(ladder)]
 
-    # 2) Textbook / leftover: RAG semantic chunks for this weak-area context.
+    # 2) Generate the rest from THIS subtopic's own printed questions first (exact
+    #    subtopic, so a question-bank PDF cannot ground it in other topics' items),
+    #    then from textbook text retrieved by meaning.
     section_text = ""
-    rag_text, rag_thread = _rag_semantic_section_text(
-        context, target_thread_ids, rag_owner_id
+    exact_text, exact_thread = _exact_bank_source_text(
+        topic_id, approved_scope, grade_level, target_thread_ids
     )
-    if rag_text.strip():
-        section_text = rag_text
-        thread_id = rag_thread or thread_id
+    if exact_text.strip():
+        section_text = exact_text
+        thread_id = exact_thread or thread_id
         pdf_section = approved_scope
+    if not section_text.strip():
+        rag_text, rag_thread = _rag_semantic_section_text(
+            context, target_thread_ids, rag_owner_id
+        )
+        if rag_text.strip():
+            section_text = rag_text
+            thread_id = rag_thread or thread_id
+            pdf_section = approved_scope
 
     # 3) Thin fallback: exact heading / exact Subtopic bank grounding only.
     if not section_text.strip():
@@ -783,14 +793,58 @@ def _semantic_bank_rows(
     limit: int = 12,
     context: Optional[str] = None,
 ):
-    """Approved Target PDF bank MCQs related to the weak area by meaning."""
+    """Approved Target PDF bank MCQs printed under THIS weak subtopic.
+
+    DIL review: "Simplifying Rational Expressions" served the definition of a
+    rational expression (printed under "Algebraic Expressions: Rational
+    Expressions") and a Synthetic Division question - semantic ranking over the
+    whole Domain picked look-alikes from other subtopics. A bank question is now
+    eligible only when its own subtopic (or printed Topic label) is the weak
+    subtopic; similarity only orders those. Too few -> the caller generates the
+    rest, grounded in this subtopic's printed questions.
+    """
     ctx = context or _weak_area_context(scope, topic_name, grade_level)
-    candidates = _load_approved_bank_candidates(
-        topic_id, target_thread_ids, limit=_SEMANTIC_BANK_CANDIDATE_CAP
-    )
-    if not candidates:
+    candidates = _load_approved_bank_candidates(topic_id, target_thread_ids, limit=1000)
+    in_scope = [row for row in candidates if _bank_row_in_scope(row, topic_id, scope, grade_level)]
+    if not in_scope:
         return []
-    return _rank_bank_rows_by_context(candidates, ctx, limit=limit, scope=scope)
+    return _order_bank_rows_by_context(in_scope, ctx)[:limit]
+
+
+def _bank_row_in_scope(row, topic_id: int, scope: str, grade_level: Optional[str]) -> bool:
+    """The bank question is printed under exactly this subtopic."""
+    from app.services.lms.ai_guided_practice_topics import label_key
+
+    tax = row[3] if len(row) > 3 else None
+    if tax is None:
+        return False
+    sub_id = _scope_subtopic_id(topic_id, scope, grade_level)
+    if sub_id and tax.subtopic_id == sub_id:
+        return True
+    printed = getattr(tax, "printed_topic", None) or ""
+    return bool(printed and scope and label_key(printed) == label_key(scope))
+
+
+def _order_bank_rows_by_context(rows, context: str):
+    """Most relevant first; never drops a row (they are all in scope)."""
+    triples = [(r[0], r[1], r[2]) for r in rows]
+    if len(rows) < 2 or not (context or "").strip():
+        return triples
+    try:
+        from app.utils.rag_service import get_rag_embeddings
+
+        embeddings = get_rag_embeddings()
+        query_vec = embeddings.embed_query(context)
+        doc_vecs = embeddings.embed_documents([(r[1].question_text or "").strip() for r in rows])
+    except Exception as exc:  # noqa: BLE001 - keep PDF order
+        logger.info("Bank ordering by relevance unavailable: %s", exc)
+        return triples
+    scored = sorted(
+        range(len(rows)),
+        key=lambda i: (-_cosine_similarity(query_vec, doc_vecs[i] if i < len(doc_vecs) else []),
+                       rows[i][0].source_question_number or 0),
+    )
+    return [triples[i] for i in scored]
 
 
 def _exact_bank_source_text(
