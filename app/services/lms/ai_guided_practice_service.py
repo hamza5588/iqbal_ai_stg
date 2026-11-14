@@ -919,14 +919,27 @@ def _valid_pool(topic_id: int) -> List[AIGPQuestion]:
     )
 
 
-def _explanation(item: dict) -> Optional[str]:
+def _clean_quotes(text: Optional[str]) -> Optional[str]:
+    """Collapse ""doubled"" quotes stored before the evidence-quoting fix."""
+    return re.sub(r'"{2,}', '"', text) if text else text
+
+
+def _explanation(item: dict, source_kind: Optional[str] = None) -> Optional[str]:
     """Generator's explanation, else the verbatim PDF fragment the grounding checker
     cited (QA B12: most questions had none, so wrong answers got no explanation)."""
     text = (item.get("explanation") or "").strip()
     if text:
         return text
     evidence = re.sub(r"\s+", " ", (item.get("grounding_evidence") or "")).strip()
-    return f'From the Target PDF: "{evidence}"' if evidence else None
+    # The checker often returns the fragment already quoted: avoid ""double"" quotes.
+    evidence = evidence.strip("\"'“”‘’ ").strip()
+    if not evidence:
+        return None
+    if source_kind == "labelled":
+        # Question-bank PDF: the cited fragment is a related printed question, not
+        # an explanation - say so instead of presenting it as one.
+        return f'Related question in the Target PDF: "{evidence}"'
+    return f'From the Target PDF: "{evidence}"'
 
 
 def _store_new_questions(
@@ -960,7 +973,7 @@ def _store_new_questions(
                 question_latex=item.get("question_latex"),
                 options_json=json.dumps(options, ensure_ascii=False),
                 correct_option_index=idx,
-                explanation=_explanation(item),
+                explanation=_explanation(item, sub.title_source),
                 difficulty=item.get("difficulty") if item.get("difficulty") in _DIFFICULTIES else "medium",
                 source_page=page,
                 source_excerpt=excerpt,
@@ -1392,8 +1405,8 @@ def _answer_feedback(item: AIGPSessionItem, q: AIGPQuestion, order: List[int]) -
         "selected_position": selected_position,
         "correct_position": correct_position,
         "correct_label": _LABELS[correct_position] if correct_position is not None else None,
-        "explanation": q.explanation,
-        "explanation_render": _render(q.explanation, None, inline=False) if q.explanation else None,
+        "explanation": _clean_quotes(q.explanation),
+        "explanation_render": _render(_clean_quotes(q.explanation), None, inline=False) if q.explanation else None,
         "source_page": q.source_page,
     }
 

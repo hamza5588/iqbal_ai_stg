@@ -267,15 +267,27 @@
 
   function optionHtml(item, o) {
     var cls = 'sd-q-option lms-quiz-option';
+    var tag = '';
     if (item.answered) {
-      if (o.position === item.correct_position) cls += ' selected lms-opt-correct';
-      else if (o.position === item.selected_position) cls += ' lms-opt-wrong';
+      // The filled radio marks what the STUDENT chose; the correct option is outlined
+      // green. (Marking the correct option "selected" made a wrong pick look right.)
+      var mine = o.position === item.selected_position;
+      var right = o.position === item.correct_position;
+      if (mine) cls += ' selected';
+      if (right) cls += ' lms-opt-correct';
+      else if (mine) cls += ' lms-opt-wrong';
+      if (mine && right) tag = 'Your answer ✓';
+      else if (mine) tag = 'Your answer';
+      else if (right) tag = 'Correct answer';
     }
     var attrs = item.answered ? ' disabled' : ' onclick="sdAigpAnswer(' + o.position + ')"';
     return '<button type="button" class="' + cls + '" data-position="' + o.position + '"' + attrs + '>' +
       '<span class="sd-radio"></span>' +
       '<span class="sd-opt-label lms-quiz-option-label">' + esc(o.label) + '.</span>' +
-      '<span class="sd-opt-body lms-quiz-option-body">' + rich(o.render || o.text, true) + '</span></button>';
+      '<span class="sd-opt-body lms-quiz-option-body">' + rich(o.render || o.text, true) + '</span>' +
+      (tag ? '<span class="sd-pill ' + (o.position === item.correct_position ? 'green' : 'red') +
+        ' round" style="margin-left:auto;white-space:nowrap;">' + esc(tag) + '</span>' : '') +
+      '</button>';
   }
 
   function feedbackHtml(item) {
