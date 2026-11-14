@@ -729,6 +729,12 @@ def subtopic_source(version: AIGPPdfVersion, main: AIGPTopic, sub: AIGPTopic) ->
     from app.services.lms.deficiency_chat_service import _looks_like_answer_key_table
 
     chunks = _thread_chunks(version)
+    if sub.title_source == "labelled":
+        # Question-bank PDF: the source is exactly the items printed under this
+        # Domain/Topic label (with the PDF's own answer key), nothing else.
+        items = topics_mod.labelled_items(topics_mod.page_texts(chunks), main.title, sub.title)
+        used = [{"page": it["page"], "text": it["text"]} for it in items]
+        return "\n\n".join(c["text"] for c in used).strip(), used
     start = sub.page_start or main.page_start
     end = sub.page_end or main.page_end or start
     by_page: Dict[int, List[str]] = {}

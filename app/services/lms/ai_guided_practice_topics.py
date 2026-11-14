@@ -47,6 +47,22 @@ _LINE_HEADING_RE = re.compile(
 )
 
 
+# Question-bank PDFs print their structure on every item instead of as headings:
+#   "Domain: Numbers | Topic: Radicals and Radicands | Cognitive Level: ... "
+_LABEL_RE = re.compile(
+    r"(?im)^[\W_]*(?:domain|unit|chapter|strand)\s*:\s*([^|\n]{2,80}?)\s*\|\s*"
+    r"(?:sub\s*-?\s*)?topic\s*:\s*([^|\n]{2,100}?)\s*(?:\||$)"
+)
+# Start of a numbered question: "Q12." / "**Q12." / "12." at line start.
+_QUESTION_START_RE = re.compile(r"(?m)^[\W_]{0,4}Q\s?(\d{1,3})[.)]\s")
+MIN_LABELLED_QUESTIONS = 5
+
+
+def label_key(title: str) -> str:
+    """Merge printed variants of one label ("... forms" / "... form")."""
+    return " ".join(w[:-1] if len(w) > 3 and w.endswith("s") else w for w in norm(title).split())
+
+
 class HierarchyError(Exception):
     """The PDF has no usable topic structure (or no text at all)."""
 
@@ -184,6 +200,106 @@ def _from_outline(outline: List[dict]) -> Optional[List[dict]]:
     if not mains or not any(m["subtopics"] for m in mains):
         return None
     return mains
+
+
+def _from_labels(pages: Dict[int, str]) -> Optional[List[dict]]:
+    """Domain -> Topic hierarchy from per-question labels (question-bank PDFs).
+
+    Titles are the labels exactly as printed; order is first appearance. Each
+    subtopic spans the pages where its questions appear (they are interleaved, so
+    page ranges overlap - the source reader selects the labelled items instead).
+    """
+    mains: Dict[str, dict] = {}
+    count = 0
+    for page, text in sorted(pages.items()):
+        for m in _LABEL_RE.finditer(text):
+            main_title, sub_title = clean_title(m.group(1)), clean_title(m.group(2))
+            if is_noise(main_title) or is_noise(sub_title):
+                continue
+            count += 1
+            main = mains.setdefault(
+                label_key(main_title),
+                {"title": main_title, "page_start": page, "page_end": page, "subs": {}},
+            )
+            main["page_end"] = max(main["page_end"], page)
+            sub = main["subs"].setdefault(
+                label_key(sub_title),
+                {"title": sub_title, "page_start": page, "page_end": page, "kind": "labelled",
+                 "is_whole_section": False},
+            )
+            sub["page_end"] = max(sub["page_end"], page)
+    if count < MIN_LABELLED_QUESTIONS or not mains:
+        return None
+    return [
+        {"title": m["title"], "page_start": m["page_start"], "page_end": m["page_end"],
+         "subtopics": list(m["subs"].values())}
+        for m in mains.values()
+    ]
+
+
+def labelled_items(pages: Dict[int, str], main_title: str, sub_title: str) -> List[dict]:
+    """The question items printed under one Domain/Topic label, with their answer.
+
+    Returns [{page, number, text}] where ``text`` is the item as printed (stem,
+    label line, options) plus "Answer: X" from the PDF's own answer key when found.
+    """
+    ordered = sorted(pages.items())
+    domains = {clean_title(m.group(1)) for _, t in ordered for m in _LABEL_RE.finditer(t)}
+    answers: Dict[int, str] = {}
+    if domains:
+        alt = "|".join(re.escape(d) for d in sorted(domains, key=len, reverse=True))
+        key_re = re.compile(r"(?<![\w.])(\d{1,3})[\s|]+([A-D])[\s|]+(?:%s)\b" % alt, re.I)
+        for _, t in ordered:
+            for m in key_re.finditer(t):
+                answers.setdefault(int(m.group(1)), m.group(2).upper())
+    # Where an item must stop: the answer-key section / its rows (plain or markdown
+    # table) - otherwise the last question swallows the key for every other topic.
+    stop_res = [
+        re.compile(r"(?i)answer\s+key"),
+        re.compile(r"(?m)^\s*\|\s*\d{1,3}\s*\|"),
+        re.compile(r"(?im)^\W*Q\s+Answer\b"),
+        re.compile(r"\[Table data"),  # ingestion's duplicate copy of the page's tables
+    ]
+    if domains:
+        stop_res.append(key_re)
+
+    def _cut(body: str) -> str:
+        ends = [m.start() for r in stop_res for m in [r.search(body)] if m and m.start() > 0]
+        return body[: min(ends)] if ends else body
+
+    blocks: List[dict] = []
+    for page, text in ordered:
+        starts = list(_QUESTION_START_RE.finditer(text))
+        if blocks and (not starts or starts[0].start() > 0):
+            # Item continued from the previous page: only its remaining plain lines
+            # (options), never page headers, extracted tables or answer-key rows.
+            head = text[: starts[0].start()] if starts else text
+            kept = []
+            for line in head.splitlines():
+                s = line.strip()
+                if not s or re.search(r"\|\s*Page\s+\d+\s*$", s):
+                    continue
+                if s.startswith(("|", "[Table")) or any(r.search(s) for r in stop_res):
+                    break
+                kept.append(line)
+            if kept and len("\n".join(kept)) < 1500:
+                blocks[-1]["text"] += "\n" + "\n".join(kept)
+        for i, m in enumerate(starts):
+            end = starts[i + 1].start() if i + 1 < len(starts) else len(text)
+            blocks.append({"page": page, "number": int(m.group(1)), "text": text[m.start():end]})
+    want_main, want_sub = label_key(main_title), label_key(sub_title)
+    out = []
+    for b in blocks:
+        lab = _LABEL_RE.search(b["text"])
+        if not lab or label_key(clean_title(lab.group(2))) != want_sub:
+            continue
+        if label_key(clean_title(lab.group(1))) != want_main:
+            continue
+        body = _cut(b["text"]).strip()
+        if b["number"] in answers:
+            body += f"\nAnswer: {answers[b['number']]}"
+        out.append({"page": b["page"], "number": b["number"], "text": body})
+    return out
 
 
 def _from_numbering(candidates: List[dict]) -> Optional[List[dict]]:
@@ -397,6 +513,11 @@ def extract_hierarchy(
     max_page = max(pages)
     structure = "outline"
     mains = _from_outline(outline)
+    if not mains:
+        labelled = _from_labels(pages)
+        if labelled:
+            # Already final: labels carry their own titles and page spans.
+            return {"structure": "question_labels", "main_topics": labelled, "warnings": []}
     if not mains:
         candidates = collect_candidates(pages, rag_headings, outline)
         structure = "headings"
