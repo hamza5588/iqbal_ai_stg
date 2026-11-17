@@ -2,7 +2,7 @@
    avatar menu, inline Create Lesson card glue and AI Tutor mode toggle.
    Loaded before teacher-core.js; every function here is looked up lazily at call time. */
 (function () {
-  var VIEWS = ['lessons', 'classes', 'quizzes', 'analytics', 'tutor'];
+  var VIEWS = ['lessons', 'classes', 'quizzes', 'assessments', 'analytics', 'tutor'];
   var currentView = null;
 
   function viewFromHash() {
@@ -33,6 +33,7 @@
     tdCloseAvatarMenu();
     if (view === 'classes' && window.tdClasses) window.tdClasses.load();
     if (view === 'quizzes' && window.tdQuizzes) window.tdQuizzes.load();
+    if (view === 'assessments' && window.tdScenario) window.tdScenario.load();
     if (view === 'analytics' && window.tdAnalytics) window.tdAnalytics.open();
     if (view === 'tutor') {
       setTimeout(function () {

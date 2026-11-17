@@ -348,7 +348,9 @@ def create_app():
     app.register_blueprint(consultant_bp, url_prefix='/api/consultant')
     from app.routes.lms_routes import bp as lms_bp
     app.register_blueprint(lms_bp, url_prefix='/api/lms')
-    
+    from app.routes.scenario_routes import bp as scenario_bp
+    app.register_blueprint(scenario_bp, url_prefix='/api/lms/scenario')
+
     # Serve teacher dashboard static assets (css, js, assets from teacherfrontend)
     from flask import send_from_directory
     teacherfrontend_dir = os.path.join(base_dir, 'teacherfrontend')

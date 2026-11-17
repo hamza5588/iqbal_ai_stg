@@ -273,6 +273,7 @@ def init_db(app):
         TestUserSet, TestUser, TestDocumentSet, TestDocument, LoadTestResult, LoadTestLog
     )
     from app.models import lms_models  # noqa: F401 — register LMS tables on Base.metadata
+    from app.models import scenario_models  # noqa: F401 — Scenario-Based Assessment tables
     from sqlalchemy import inspect
     import time
     

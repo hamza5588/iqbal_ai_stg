@@ -1,0 +1,23 @@
+{# Scenario-Based Assessments (teacher). Rendered by static/teacher/js/teacher-scenario.js.
+   API: /api/lms/scenario/*. #}
+<div id="tdSbaList">
+  <div class="td-toolbar">
+    <div class="td-section-title"><h2 style="margin:0;">Scenario Assessments</h2></div>
+    <button type="button" class="td-btn td-btn-primary" id="tdSbaNewBtn" onclick="tdScenario.openCreate()"><i class="fas fa-plus"></i> New scenario assessment</button>
+  </div>
+  <p class="td-desc">Upload learning content, sample questions and general reference answers. The AI drafts scenario-based questions for you to review, then grades students' written answers against your rubric.</p>
+  <div class="td-card" id="tdSbaCreate" style="display:none;">
+    <h3 style="margin-top:0;">New scenario assessment</h3>
+    <div class="sba-form">
+      <div><label for="tdSbaNewTitle">Title</label><input id="tdSbaNewTitle" maxlength="255" placeholder="e.g. Supply chain coordination case study"></div>
+      <div><label for="tdSbaNewClass">Class</label><select id="tdSbaNewClass"></select></div>
+    </div>
+    <div class="sba-actions">
+      <button type="button" class="td-btn td-btn-primary" id="tdSbaCreateBtn" onclick="tdScenario.create()">Create</button>
+      <button type="button" class="td-btn td-btn-outline" onclick="tdScenario.closeCreate()">Cancel</button>
+      <span class="sba-note" id="tdSbaCreateMsg"></span>
+    </div>
+  </div>
+  <div id="tdSbaTable"></div>
+</div>
+<div id="tdSbaDetail" style="display:none;"></div>

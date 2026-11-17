@@ -1,0 +1,54 @@
+/* Scenario-Based Assessment: shared by the teacher (td-*) and student (sd-*) dashboards. */
+.sba-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.sba-upload { border: 1px dashed #c7d4ea; border-radius: 12px; padding: 14px; background: #fafcff; }
+.sba-upload h4 { margin: 0 0 4px; font-size: 15px; color: #1e3a8a; }
+.sba-upload p { margin: 0 0 10px; font-size: 12.5px; color: #64748b; }
+.sba-upload input[type=file] { width: 100%; font-size: 13px; margin-bottom: 8px; }
+.sba-doc { border-top: 1px solid #e5eaf3; padding: 8px 0; font-size: 13px; }
+.sba-doc:first-of-type { border-top: 0; }
+.sba-doc .sba-doc-name { font-weight: 600; word-break: break-word; }
+.sba-doc .sba-doc-meta { color: #64748b; font-size: 12px; margin-top: 2px; }
+.sba-doc .sba-doc-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+.sba-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 18px; }
+.sba-b-ready, .sba-b-approved, .sba-b-published, .sba-b-evaluated, .sba-b-released { background: #dcfce7; color: #166534; }
+.sba-b-pending, .sba-b-processing, .sba-b-draft, .sba-b-submitted, .sba-b-evaluating, .sba-b-running { background: #e0e7ff; color: #3730a3; }
+.sba-b-failed, .sba-b-rejected { background: #fee2e2; color: #991b1b; }
+.sba-b-review, .sba-b-under_review, .sba-b-awaiting_release { background: #fef3c7; color: #92400e; }
+.sba-b-old { background: #f1f5f9; color: #475569; }
+.sba-q { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px; background: #fff; }
+.sba-q-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.sba-q-scenario { background: #f8fafc; border-left: 3px solid #3b82f6; padding: 10px 12px; border-radius: 6px; white-space: pre-wrap; line-height: 1.55; }
+.sba-q-text { font-weight: 700; margin: 10px 0 6px; line-height: 1.5; white-space: pre-wrap; }
+.sba-q-meta { font-size: 12.5px; color: #475569; margin-top: 6px; }
+.sba-q-meta b { color: #1e293b; }
+.sba-q textarea, .sba-form textarea { width: 100%; min-height: 90px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font: inherit; box-sizing: border-box; }
+.sba-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.sba-form label { display: block; font-size: 12.5px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+.sba-form input, .sba-form select { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font: inherit; box-sizing: border-box; background: #fff; }
+.sba-form .sba-wide { grid-column: 1 / -1; }
+.sba-rubric { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sba-rubric td, .sba-rubric th { padding: 6px 8px; border-bottom: 1px solid #e5eaf3; text-align: left; }
+.sba-rubric input { width: 80px; }
+.sba-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.sba-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.sba-table th, .sba-table td { padding: 9px 10px; border-bottom: 1px solid #e5eaf3; text-align: left; vertical-align: top; }
+.sba-table tr.sba-click { cursor: pointer; }
+.sba-table tr.sba-click:hover { background: #f8fafc; }
+.sba-crit { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #eef2f7; }
+.sba-crit small { grid-column: 1 / -1; color: #475569; }
+.sba-bar { height: 6px; border-radius: 4px; background: #e2e8f0; grid-column: 1 / -1; overflow: hidden; }
+.sba-bar > span { display: block; height: 100%; background: #2563eb; }
+.sba-list { margin: 4px 0 0 18px; padding: 0; font-size: 13px; }
+.sba-note { font-size: 12.5px; color: #64748b; }
+.sba-warn { font-size: 12.5px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+.sba-err { font-size: 12.5px; color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+.sba-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 14px; }
+.sba-tabs button { border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 7px 14px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.sba-tabs button.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+.sba-score { font-size: 26px; font-weight: 800; color: #1e3a8a; }
+.sba-excerpt { font-size: 12px; color: #334155; background: #f8fafc; border-radius: 6px; padding: 6px 8px; margin-top: 4px; white-space: pre-wrap; max-height: 140px; overflow: auto; }
+.sba-row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.sba-row > * { flex: 1 1 280px; min-width: 0; }
+@media (max-width: 640px) {
+  .sba-table th:nth-child(n+4), .sba-table td:nth-child(n+4) { display: none; }
+}

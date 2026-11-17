@@ -101,7 +101,7 @@
      Flows opened from them (need live state, never a landing target):
      diagnostic-quiz (lms-student.js), learning-chat (lms-deficiency-chat.js), lesson (student-lessons.js). */
   // AI Guided Practice is deliberately NOT gated: it needs no diagnostic or Learning Path.
-  var TOP_VIEWS = ['diagnostic', 'learning-path', 'classes', 'ai-guided-practice'];
+  var TOP_VIEWS = ['diagnostic', 'learning-path', 'classes', 'ai-guided-practice', 'scenario'];
   var FLOW_PARENT = { 'diagnostic-quiz': 'diagnostic', 'learning-chat': 'learning-path', 'lesson': 'classes', 'ai-guided-session': 'ai-guided-practice' };
   var GATED = { 'learning-path': 1, 'classes': 1, 'learning-chat': 1, 'lesson': 1 };
   var flows = { 'diagnostic-quiz': false, 'learning-chat': false, 'lesson': false, 'ai-guided-session': false };
@@ -140,7 +140,8 @@
       // AI Guided Practice does not depend on the diagnostic, so it is the one place a
       // student may go while the mandatory diagnostic is open (answers are saved by
       // closeLmsDiagnostic). Every other destination stays locked.
-      var toPractice = target === 'ai-guided-practice' || target === 'ai-guided-session';
+      // Scenario assessments are class work set by a teacher and do not depend on the diagnostic either.
+      var toPractice = target === 'ai-guided-practice' || target === 'ai-guided-session' || target === 'scenario';
       if (window._lmsDiagnosticMandatory && !window._lmsDiagnosticAllowClose && !toPractice) {
         window.showToast('Please complete and submit the diagnostic assessment first.', 'error');
         return false;
@@ -405,7 +406,7 @@
     window._lmsNeedsDiagnostic = ob && ob.diagnostic_completed === false;
     // A deep link to AI Guided Practice opens it directly; it does not need the diagnostic.
     var startHash = (window.location.hash || '').replace(/^#/, '');
-    if (window._lmsNeedsDiagnostic && (startHash === 'ai-guided-practice' || startHash === 'ai-guided-session')) {
+    if (window._lmsNeedsDiagnostic && (startHash === 'ai-guided-practice' || startHash === 'ai-guided-session' || startHash === 'scenario')) {
       if (typeof setLmsDiagnosticGate === 'function') setLmsDiagnosticGate(true);
       return false;
     }

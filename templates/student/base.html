@@ -31,6 +31,7 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='student/css/student-dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/scenario.css') }}?v=20261117sba1">
 
   <!-- MathJax v3: TeX delimiters, skip code blocks, no automatic typeset -->
   <script>
@@ -92,7 +93,7 @@
   {% include 'student/partials/modals.html' %}
 
   {# Order: shell helpers (escapeHtml, toasts) → shared LMS core/panels → student LMS flows → screen modules. #}
-  <script src="{{ url_for('static', filename='student/js/student-shell.js') }}?v=20261113qa1"></script>
+  <script src="{{ url_for('static', filename='student/js/student-shell.js') }}?v=20261117sba1"></script>
   <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261116fmt1"></script>
   <script src="{{ url_for('static', filename='lms/lms-panels.js') }}?v=20261109qtime1"></script>
   <script src="{{ url_for('static', filename='lms/lms-student.js') }}?v=20261109qtime1"></script>
@@ -103,6 +104,7 @@
   <script src="{{ url_for('static', filename='student/js/student-learning-path.js') }}?v=20261112aigp1"></script>
   <script src="{{ url_for('static', filename='student/js/student-classes.js') }}"></script>
   <script src="{{ url_for('static', filename='student/js/student-ai-guided-practice.js') }}?v=20261116retry1"></script>
+  <script src="{{ url_for('static', filename='student/js/student-scenario.js') }}?v=20261117sba1"></script>
   <script src="{{ url_for('static', filename='student/js/student-tutor.js') }}"></script>
   <script src="{{ url_for('static', filename='student/js/tutor-usage.js') }}?v=20261022usage1"></script>
   {% block scripts %}{% endblock %}
