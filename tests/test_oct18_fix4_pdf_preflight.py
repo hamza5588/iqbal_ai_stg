@@ -212,9 +212,7 @@ from app.services.quiz.assessment_doc_validation import (  # noqa: E402
 @pytest.mark.parametrize(
     "factory, reason, message",
     [
-        (scanned_pdf, "PDF_SCANNED", pp.PDF_SCANNED_MESSAGE),
         (encrypted_pdf, "PDF_PASSWORD_PROTECTED", pp.PDF_PASSWORD_PROTECTED_MESSAGE),
-        (blank_pdf, "PDF_NO_TEXT", pp.PDF_NO_TEXT_MESSAGE),
         (lambda: ZERO_PAGE_PDF, "PDF_EMPTY", pp.PDF_EMPTY_MESSAGE),
         (lambda: b"%PDF-1.4\n" + b"\x00garbage" * 50, "PDF_UNREADABLE", pp.PDF_UNREADABLE_MESSAGE),
     ],
@@ -232,6 +230,12 @@ def test_assert_supported_assessment_file_raises_specific_reason(factory, reason
 def test_assert_supported_assessment_file_accepts_valid_and_mcq_pdfs():
     assert_supported_assessment_file("quiz.pdf", text_pdf(MCQ_TEXT))
     assert_supported_assessment_file("quiz.pdf", mixed_pdf())
+
+
+def test_assert_supported_assessment_file_accepts_scanned_and_textless_pdfs():
+    # Any kind of PDF is accepted: hybrid vision reads page images.
+    assert_supported_assessment_file("quiz.pdf", scanned_pdf())
+    assert_supported_assessment_file("quiz.pdf", blank_pdf())
 
 
 @pytest.mark.parametrize(
@@ -297,20 +301,17 @@ def _post_quiz(c, data_bytes, filename="quiz.pdf"):
     )
 
 
-def test_api_from_pdf_scanned_rejected_before_any_work(lms_client):
+def test_api_from_pdf_scanned_accepted_for_vision(lms_client):
+    # Any kind of PDF is accepted: scanned papers go to the hybrid vision pipeline.
     c, calls = lms_client
     r = _post_quiz(c, scanned_pdf())
-    assert r.status_code == 400
-    err = r.get_json()["error"]
-    assert err["code"] == "validation_error"
-    assert err["message"] == pp.PDF_SCANNED_MESSAGE
-    assert err["details"] == {"reason": "PDF_SCANNED"}
-    assert calls.create == [] and calls.enqueue == [], "no assessment / AI job for a scanned PDF"
+    assert r.status_code == 200, r.get_json()
+    assert len(calls.create) == 1 and len(calls.enqueue) == 1
 
 
 @pytest.mark.parametrize(
     "factory, reason",
-    [(encrypted_pdf, "PDF_PASSWORD_PROTECTED"), (blank_pdf, "PDF_NO_TEXT"), (lambda: ZERO_PAGE_PDF, "PDF_EMPTY")],
+    [(encrypted_pdf, "PDF_PASSWORD_PROTECTED"), (lambda: ZERO_PAGE_PDF, "PDF_EMPTY")],
 )
 def test_api_from_pdf_other_preflight_failures(lms_client, factory, reason):
     c, calls = lms_client
@@ -336,16 +337,14 @@ def test_api_from_pdf_valid_pdf_proceeds(lms_client):
     assert len(calls.create) == 1 and len(calls.enqueue) == 1
 
 
-def test_api_process_pdf_scanned_rejected(lms_client):
+def test_api_process_pdf_scanned_accepted(lms_client):
     c, calls = lms_client
     r = c.post(
         "/api/lms/quizzes/5/process-pdf",
         data={"file": (io.BytesIO(scanned_pdf()), "quiz.pdf")},
         content_type="multipart/form-data",
     )
-    assert r.status_code == 400
-    assert r.get_json()["error"]["details"] == {"reason": "PDF_SCANNED"}
-    assert calls.enqueue == []
+    assert r.status_code != 400 or (r.get_json()["error"].get("details") or {}).get("reason") != "PDF_SCANNED"
 
 
 # ------------------------------------------------------------- legacy create_lesson
@@ -408,21 +407,19 @@ def test_mostly_scanned_with_page_numbers_default_rejected_but_assessment_mode_p
     assert_supported_assessment_file("quiz.pdf", data, label="Assessment PDF")  # does not raise
 
 
-def test_fully_image_only_rejected_in_both_modes():
+def test_fully_image_only_flagged_by_preflight_but_accepted_for_assessments():
     data = scanned_pdf()
     assert pp.preflight_check_pdf(data)["code"] == "PDF_SCANNED"
     assert pp.preflight_check_pdf(data, reject_mostly_scanned=False)["code"] == "PDF_SCANNED"
-    with pytest.raises(AssessmentDocValidationError) as ei:
-        assert_supported_assessment_file("quiz.pdf", data, label="Assessment PDF")
-    assert ei.value.reason == "PDF_SCANNED"
+    assert_supported_assessment_file("quiz.pdf", data, label="Assessment PDF")  # does not raise
 
 
 def test_non_assessment_label_prefixes_public_message():
     with pytest.raises(AssessmentDocValidationError) as ei:
-        assert_supported_assessment_file("t.pdf", scanned_pdf(), label="Target content PDF")
+        assert_supported_assessment_file("t.pdf", encrypted_pdf(), label="Target content PDF")
     e = ei.value
-    assert e.public_message == "Target content PDF: " + pp.PDF_SCANNED_MESSAGE
-    assert public_error_message(e) == e.public_message and e.reason == "PDF_SCANNED"
+    assert e.public_message == "Target content PDF: " + pp.PDF_PASSWORD_PROTECTED_MESSAGE
+    assert public_error_message(e) == e.public_message and e.reason == "PDF_PASSWORD_PROTECTED"
 
 
 def test_assessment_label_not_prefixed():

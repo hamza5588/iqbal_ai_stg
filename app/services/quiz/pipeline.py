@@ -35,7 +35,7 @@ def _question_categories(
     *,
     domain_mapping_expected: bool = False,
 ) -> tuple[List[MCQQuestion], List[str], bool]:
-    """Return complete categories, failing closed on partial printed domains.
+    """Return complete categories; gaps fall back to concept labels, never reject.
 
     If even one printed Domain is present, every question must have a real
     printed Domain. Papers with no Domain column use the question's printed
@@ -53,21 +53,19 @@ def _question_categories(
     has_printed_domains = any(domains)
 
     if has_printed_domains or domain_mapping_expected:
-        invalid = [
-            source_numbers[index] if index < len(source_numbers) else index + 1
-            for index, domain in enumerate(domains)
-            if not domain or is_generic_concept(domain)
-        ]
-        if invalid:
-            joined = ", ".join(f"Q{number}" for number in invalid)
-            raise AssessmentDocValidationError(
-                detail=f"Printed Domain mapping is incomplete or generic for {joined}",
-                public_message=(
-                    "The PDF question categories could not be verified for "
-                    f"{joined}. Please correct the Domain mapping and upload again."
-                ),
-                reason="INCOMPLETE_DOMAIN_MAPPING",
-            )
+        # Any PDF format is accepted: questions with a missing/generic printed Domain
+        # fall back to the concept labeler instead of rejecting the whole upload.
+        gaps = [i for i, d in enumerate(domains) if not d or is_generic_concept(d)]
+        if gaps:
+            try:
+                fill = assign_learning_concepts([questions[i] for i in gaps])
+            except Exception as exc:  # labeler is best-effort; never block the upload
+                logger.warning("Concept labeler failed for Domain gaps: %s", exc)
+                fill = [questions[i] for i in gaps]
+            for i, q in zip(gaps, fill):
+                concept = clean(getattr(q, "learning_concept", None))
+                domains[i] = concept if concept and not is_generic_concept(concept) else "General"
+            logger.warning("Printed Domain missing for %d question(s); used concept labels", len(gaps))
         normalized = [
             question.model_copy(
                 update={"domain": domains[index], "learning_concept": domains[index]}
@@ -76,25 +74,19 @@ def _question_categories(
         ]
         return normalized, domains, True
 
-    labeled = assign_learning_concepts(list(questions))
+    try:
+        labeled = assign_learning_concepts(list(questions))
+    except Exception as exc:  # labeler is best-effort; never block the upload
+        logger.warning("Concept labeler failed: %s", exc)
+        labeled = list(questions)
     categories = [
         clean(getattr(question, "learning_concept", None)) for question in labeled
     ]
-    invalid = [
-        source_numbers[index] if index < len(source_numbers) else index + 1
-        for index, category in enumerate(categories)
-        if not category or is_generic_concept(category)
+    # Any PDF format is accepted: unresolved categories become "General".
+    categories = [
+        category if category and not is_generic_concept(category) else "General"
+        for category in categories
     ]
-    if invalid:
-        joined = ", ".join(f"Q{number}" for number in invalid)
-        raise AssessmentDocValidationError(
-            detail=f"No non-generic question category could be resolved for {joined}",
-            public_message=(
-                "The PDF question categories could not be verified for "
-                f"{joined}. Add a Domain or Topic for every question and upload again."
-            ),
-            reason="UNRESOLVED_QUESTION_CATEGORY",
-        )
     return labeled, categories, False
 
 

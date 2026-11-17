@@ -18,6 +18,7 @@ ASSESSMENT_FORMAT_ERROR = (
 
 _SUPPORTED_EXTENSIONS = {".pdf"}
 _PDF_MAGIC = b"%PDF"
+_PASSABLE_PREFLIGHT_CODES = {"PDF_SCANNED", "PDF_NO_TEXT", "PDF_VALIDATION_TIMEOUT"}
 
 
 class AssessmentDocValidationError(LMSValidationError):
@@ -76,6 +77,11 @@ def assert_supported_assessment_file(
     # Assessment pipelines (LlamaParse / page-image vision) can read mostly-scanned pages,
     # so only PDFs with no text layer at all are rejected as scanned here.
     preflight = preflight_check_pdf(data, reject_mostly_scanned=False)
+    # Any kind of PDF is accepted: scanned / image-only / slow-to-scan files go on to
+    # the hybrid vision pipeline, which reads page images. Only files that cannot be
+    # opened at all (corrupted, password-protected, no pages, decompression bomb) fail.
+    if not preflight.get("ok") and preflight.get("code") in _PASSABLE_PREFLIGHT_CODES:
+        return
     if not preflight.get("ok"):
         message = preflight.get("message") or ASSESSMENT_FORMAT_ERROR
         # Diagnostics upload several PDFs at once: say which one failed.
@@ -162,8 +168,9 @@ def assert_topic_or_key_area_available(
             return
     # Quizzes can be published without section headings; diagnostics must map
     # questions to key areas for Learning Chat / mastery.
-    if (assessment_type or "").strip().lower() == "diagnostic":
-        _raise("No topic or key-area headings found in document")
+    # Any PDF format is accepted: questions without headings keep the concept
+    # labels assigned during extraction instead of failing the upload.
+    return
 
 
 def public_error_message(exc: BaseException) -> str:

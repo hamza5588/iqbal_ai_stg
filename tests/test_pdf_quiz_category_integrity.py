@@ -47,23 +47,26 @@ def test_real_domains_are_not_generic():
     assert not is_generic_concept("Algebra")
 
 
-def test_partial_printed_domains_fail_closed():
+def test_partial_printed_domains_fall_back_instead_of_failing():
+    # Any PDF format is accepted: missing printed Domains use concept labels / "General".
     questions = [
         _pipeline_question("Numbers" if index < 5 else None)
         for index in range(10)
     ]
-    with pytest.raises(LMSValidationError, match="question categories could not be verified"):
-        _question_categories(questions, list(range(1, 11)))
+    _, labels, explicit = _question_categories(questions, list(range(1, 11)))
+    assert explicit is True
+    assert labels[:5] == ["Numbers"] * 5
+    assert all(label for label in labels[5:])
 
 
-def test_source_domain_table_cannot_fall_back_when_extractor_loses_every_domain():
+def test_source_domain_table_falls_back_when_extractor_loses_every_domain():
     questions = [_pipeline_question(concept="Fractions") for _ in range(10)]
-    with pytest.raises(LMSValidationError, match="question categories could not be verified"):
-        _question_categories(
-            questions,
-            list(range(1, 11)),
-            domain_mapping_expected=True,
-        )
+    _, labels, _ = _question_categories(
+        questions,
+        list(range(1, 11)),
+        domain_mapping_expected=True,
+    )
+    assert len(labels) == 10 and all(labels)
     assert _source_declares_question_domains(
         "Answer Key\nQ Answer Domain Topic Cognitive Level"
     )
