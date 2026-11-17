@@ -100,8 +100,24 @@ def main():
     ctx_info = {}
     with sync_playwright() as p:
         exe = os.environ.get("SBA_CHROMIUM_EXE") or None  # e.g. an already-installed ms-playwright chrome.exe
-        browser = p.chromium.launch(headless=True, executable_path=exe)
-        teacher = browser.new_context(viewport={"width": 1366, "height": 900}).new_page()
+        headed = os.environ.get("SBA_HEADED", "") in ("1", "true", "yes")
+        browser = p.chromium.launch(headless=not headed, executable_path=exe,
+                                    slow_mo=int(os.environ.get("SBA_SLOWMO", "0") or 0))
+        record = os.environ.get("SBA_RECORD", "") in ("1", "true", "yes")
+        contexts = []
+
+        def new_page(name, viewport=None):
+            kw = {"viewport": viewport or {"width": 1366, "height": 900}}
+            if record:
+                kw["record_video_dir"] = os.path.join(OUT, "videos", name)
+                kw["record_video_size"] = kw["viewport"]
+            ctx = browser.new_context(**kw)
+            if record:
+                ctx.tracing.start(screenshots=True, snapshots=True, sources=False, title=name)
+            contexts.append((name, ctx))
+            return ctx.new_page()
+
+        teacher = new_page("teacher")
         teacher.on("dialog", lambda d: d.accept())
 
         # ── A: teacher setup ────────────────────────────────────────────────
@@ -149,7 +165,7 @@ def main():
         teacher.screenshot(path=os.path.join(OUT, "A_teacher_setup.png"), full_page=True)
 
         # ── B: generation, approval, publish ───────────────────────────────
-        student_b = browser.new_context().new_page()
+        student_b = new_page("student_b")
         login(student_b, "sba.b@e2e.test")
         s_pre, _ = api(student_b, "get", f"/student/assessments/{aid}")
         log(results, "B0 unpublished assessment hidden from enrolled student", s_pre == 404, status=s_pre)
@@ -205,7 +221,7 @@ def main():
         ctx_info["question_ids"] = [q["id"] for q in approved]
 
         # ── C: student answers ─────────────────────────────────────────────
-        sa = browser.new_context(viewport={"width": 1280, "height": 900}).new_page()
+        sa = new_page("student_a", {"width": 1280, "height": 900})
         sa.on("dialog", lambda dl: dl.accept())
         login(sa, "sba.a@e2e.test")
         sa.goto(f"{BASE}/student-dashboard#scenario")
@@ -284,11 +300,11 @@ def main():
             "studentA_teacher_assessment_detail(ref docs)": api(sa, "get", f"/assessments/{aid}")[0] == 403,
             "studentB_cannot_see_A_answer": "bullwhip effect: order variability" not in json.dumps(api(student_b, "get", f"/student/assessments/{aid}")[1]),
         }
-        sc = browser.new_context().new_page()
+        sc = new_page("student_c_other_class")
         login(sc, "sba.c@e2e.test")
         checks["other_class_student_404"] = api(sc, "get", f"/student/assessments/{aid}")[0] == 404
         checks["other_class_student_list_empty"] = api(sc, "get", "/student/assessments")[1]["data"] == []
-        t2 = browser.new_context().new_page()
+        t2 = new_page("teacher2_other")
         login(t2, "sba.teacher2@e2e.test")
         checks["other_teacher_assessment_404"] = api(t2, "get", f"/assessments/{aid}")[0] == 404
         checks["other_teacher_edit_404"] = api(t2, "put", f"/questions/{qids[0]}", {"status": "rejected"})[0] == 404
@@ -334,6 +350,10 @@ def main():
         r1 = next(i for i in r["items"] if i["id"] == a_sub["question_id"])["submission"]["result"]
         log(results, "F3 teacher override visible to the student", r1.get("score") == 9.5 and r1.get("teacher_adjusted"), result_score=r1.get("score"))
 
+        for name, ctx in contexts:
+            if record:
+                ctx.tracing.stop(path=os.path.join(OUT, f"trace_{name}.zip"))
+            ctx.close()  # flushes the video files
         browser.close()
     summary = {"base": BASE, "context": ctx_info, "passed": sum(r["ok"] for r in results), "failed": sum(not r["ok"] for r in results), "steps": results}
     with open(os.path.join(OUT, "e2e_results.json"), "w", encoding="utf-8") as fh:
