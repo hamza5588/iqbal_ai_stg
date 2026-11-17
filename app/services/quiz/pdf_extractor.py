@@ -12,11 +12,13 @@ from app.services.lms.mcq_utils import (
     parse_answer_label,
     split_stem_and_options,
 )
+from app.services.quiz.mcq_converter import native_mcq_from_pair
 from app.services.quiz.models import (
     ExtractedAnswer,
     ExtractedOption,
     ExtractedQuestion,
     LatexNormalizedBatch,
+    MCQQuestion,
     PDFExtractionResult,
     PairingResult,
     QuestionAnswerPair,
@@ -339,6 +341,69 @@ def _result_from_harvest(pdf_text: str) -> Optional[PDFExtractionResult]:
         confidence=0.94 if answers else 0.9,
         warnings=warnings,
     )
+
+
+def try_native_mcq_harvest(
+    pdf_text: str,
+    *,
+    wanted: Optional[int] = None,
+) -> Optional[tuple[List[MCQQuestion], List[int], List[Optional[str]], List[str], float]]:
+    """Deterministic harvest of printed MCQ banks (Q1./1. + A–D + answer key).
+
+    Returns ``(questions, source_numbers, answer_letters, warnings, confidence)``
+    or ``None`` when the document is not a harvestable native MCQ paper.
+    """
+    text = (pdf_text or "").strip()
+    if not text:
+        return None
+    harvested = harvest_native_mcqs(text)
+    answers = harvest_answer_key(text)
+    if len(harvested) < 4:
+        return None
+    ans_map = {_normalize_number(num): letter for num, letter in answers}
+    questions: List[MCQQuestion] = []
+    source_numbers: List[int] = []
+    answer_letters: List[Optional[str]] = []
+    warnings: List[str] = [f"Extractor: native_text_harvest ({len(harvested)} stems)"]
+    for item in harvested:
+        num = item.get("number")
+        letter = ans_map.get(_normalize_number(num)) or parse_answer_label(
+            str(item.get("answer") or "")
+        )
+        if letter not in ("A", "B", "C", "D"):
+            continue
+        opts = [
+            ExtractedOption(label=o["label"], text=o["text"], latex=o.get("latex"))
+            for o in (item.get("options") or [])
+        ]
+        pair = QuestionAnswerPair(
+            question_number=num if num is not None else len(questions) + 1,
+            question_text=item.get("text") or "",
+            question_latex=item.get("latex"),
+            answer_text=letter,
+            options=opts,
+            correct_option_label=letter,  # type: ignore[arg-type]
+        )
+        mcq = native_mcq_from_pair(pair)
+        if not mcq:
+            continue
+        questions.append(mcq)
+        try:
+            source_numbers.append(int(num))
+        except (TypeError, ValueError):
+            source_numbers.append(len(source_numbers) + 1)
+        answer_letters.append(letter)
+
+    min_ok = max(4, int(0.5 * len(harvested)))
+    if len(questions) < min_ok:
+        return None
+    if wanted is not None and wanted > 0 and len(questions) > wanted:
+        questions = questions[:wanted]
+        source_numbers = source_numbers[:wanted]
+        answer_letters = answer_letters[:wanted]
+        warnings.append(f"Using first {wanted} of native-harvested questions")
+    conf = 0.94 if answers else 0.9
+    return questions, source_numbers, answer_letters, warnings, conf
 
 
 def _answer_key_region(pdf_text: str) -> str:

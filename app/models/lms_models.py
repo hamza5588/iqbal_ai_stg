@@ -95,6 +95,8 @@ class Question(Base):
     correct_option_index = Column(Integer, nullable=False)
     correct_answer_raw = Column(Text, nullable=True)
     explanation = Column(Text, nullable=True)
+    domain = Column(String(255), nullable=True)
+    topic_label = Column(String(255), nullable=True)
     difficulty = Column(String(20), nullable=False, default="medium", server_default="medium")
     # Canonical cognitive level printed on the source paper (Knowledge /
     # Understanding / Application / Analysis/Reasoning); NULL when not printed.

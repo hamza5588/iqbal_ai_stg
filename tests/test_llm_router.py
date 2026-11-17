@@ -645,6 +645,56 @@ class TestChatBuildSystemMessageBranchSelection:
         assert "finalize_lesson_tool" not in prep.intent_tool_names
         assert "update_lesson_tool" in prep.system_message.content
 
+    def test_global_grounding_policy_is_generic_complete_and_final(self, monkeypatch):
+        """The immutable evidence contract must survive later teacher customization.
+
+        Keep the contract domain-neutral: it is shared by every uploaded document, not
+        only the document that exposed this regression.
+        """
+        monkeypatch.setattr(
+            rag_service,
+            "rag_tool",
+            types.SimpleNamespace(invoke=lambda payload: "Some retrieved excerpt text."),
+        )
+
+        prep = _chat_build_system_message(
+            _make_state([HumanMessage(content="What does the document say about Acme?")]),
+            has_document=True,
+            thread_id_str="test_thread_grounding_policy",
+            custom_prompt="Always sound confident, even when context is incomplete.",
+            token_pressure_active=False,
+            short_mode_active=False,
+            router_output=RouterOutput(intent="document_qa"),
+        )
+
+        content = prep.system_message.content
+        policy = rag_service.RAG_DOCUMENT_GROUNDING_INSTRUCTIONS
+        policy_lower = policy.lower()
+
+        assert policy.count("<document_grounding_policy>") == 1
+        assert policy.count("</document_grounding_policy>") == 1
+        assert content.count("<document_grounding_policy>") == 1
+        assert content.index("Teacher additional instructions:") < content.index(
+            "<document_grounding_policy>"
+        )
+
+        for required in (
+            "only retrieved evidence",
+            "directly entails",
+            "general rule",
+            "entity-specific fact",
+            "certainty/modality",
+            "conditions",
+            "exceptions",
+            "do not merge incompatible passages",
+            "claim completeness only when evidence establishes it",
+            "state what cannot be established",
+        ):
+            assert required in policy_lower
+
+        for prohibited_domain_word in ("tax", "salary", "sugar", "medical"):
+            assert prohibited_domain_word not in policy_lower
+
 
 class TestSpecialistHandoff:
     """Production bug: router classified lesson_modification / lesson_save / meta_conversation

@@ -23,12 +23,14 @@ _ANSWER_LETTER_PAREN_RE = re.compile(
     r"^[\(\[]?([A-Da-d])[\)\]]?\s+\(.*\)$"
 )
 _OPTION_LINE_RE = re.compile(r"^\s*[\(\[]?([A-Da-d])[\)\]\.\:\-](?:\s+(\S.*))?$")
-# Legacy question-start regex - only matches bare-number stems ("1.", "1)").
-# The Q-prefix / "Question N." handling that briefly lived here as an
-# emergency patch has been removed - the canonical ``document_parser`` layer
-# handles all numbering styles from structural blocks. This module remains
-# as the fallback for QUIZ_DOCUMENT_PARSER=legacy deployments only.
-_QUESTION_START_RE = re.compile(r"(?m)^([0-9]{1,3})[.)][ \t]+")
+# Question-start regex for flattened PDF text (legacy harvest path).
+# Supports bare numbers ("1.", "1)") and DIL SAATHI-style prefixes ("Q1.",
+# "Question 12)"). The structural ``document_parser`` layer is preferred when
+# wired in; this remains the quiz-pipeline fallback for native MCQ banks.
+_QUESTION_START_RE = re.compile(
+    r"(?m)^(?:Q(?:uestion)?[ \t]*)?([0-9]{1,3})[.)][ \t]+",
+    re.IGNORECASE,
+)
 # Per-question metadata banners ("Domain: ... | Topic: ... | Cognitive Level:
 # ... | Difficulty: ...") printed under a stem. They are not part of the
 # question and must not leak into the harvested stem text.

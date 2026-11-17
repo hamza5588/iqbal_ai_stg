@@ -160,6 +160,9 @@ def questions():
             explanation=body.get("explanation"),
             difficulty=body.get("difficulty", "medium"),
             source_type=body.get("source_type", "manual"),
+            domain=body.get("domain"),
+            topic_label=body.get("topic_label") or body.get("topic"),
+            cognitive_level=body.get("cognitive_level"),
         )
         return json_success(question_bank_service.question_to_dict(q), status=201)
     except (KeyError, TypeError, ValueError) as e:

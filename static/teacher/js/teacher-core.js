@@ -7086,27 +7086,49 @@ To continue your learning journey:
       }
 
       let _chatProgressPollTimer = null;
+      let _chatProgressPollGeneration = 0;
 
       function startChatProgressPolling(threadId) {
         stopChatProgressPolling();
         if (!threadId) return;
-        _chatProgressPollTimer = setInterval(async function () {
+        const generation = ++_chatProgressPollGeneration;
+        const startedAt = Date.now();
+
+        async function pollChatProgress() {
           try {
             const res = await fetch('/api/rag/chat-progress/' + encodeURIComponent(threadId), {
               credentials: 'include'
             });
-            if (!res.ok) return;
-            const data = await res.json();
-            if (data && data.message) updateTypingIndicatorText(data.message);
+            if (generation !== _chatProgressPollGeneration) return;
+            if (res.ok) {
+              const data = await res.json();
+              if (generation !== _chatProgressPollGeneration) return;
+              if (data && data.message) {
+                const elapsedSeconds = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
+                updateTypingIndicatorText(data.message + ' (' + elapsedSeconds + 's)');
+              } else {
+                updateTypingIndicatorText('AI is thinking...');
+              }
+            }
           } catch (e) {
             // Best-effort only - never surface this as a chat error.
+          } finally {
+            // Await each poll before scheduling the next one. This avoids overlapping
+            // ownership/Redis requests when the server is busy.
+            if (generation === _chatProgressPollGeneration) {
+              _chatProgressPollTimer = setTimeout(pollChatProgress, 1500);
+            }
           }
-        }, 800);
+        }
+
+        // Show the first real backend stage immediately instead of waiting one interval.
+        pollChatProgress();
       }
 
       function stopChatProgressPolling() {
+        _chatProgressPollGeneration += 1;
         if (_chatProgressPollTimer) {
-          clearInterval(_chatProgressPollTimer);
+          clearTimeout(_chatProgressPollTimer);
           _chatProgressPollTimer = null;
         }
       }

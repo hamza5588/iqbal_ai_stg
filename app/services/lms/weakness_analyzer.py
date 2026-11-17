@@ -570,6 +570,9 @@ def analyze_diagnostic_attempt(attempt_id: int, use_cache: bool = True) -> dict:
     questions = db.query(Question).filter(Question.id.in_(q_ids)).all()
     answers = db.query(AttemptAnswer).filter(AttemptAnswer.attempt_id == attempt_id).all()
     ans_map = {a.question_id: a for a in answers}
+    from app.services.lms.adaptive_practice_service import analyze_metadata_attempt, metadata_of
+    if questions and all(all(metadata_of(q).values()) for q in questions):
+        return analyze_metadata_attempt(attempt_id)
     meta = _parse_assessment_meta(assessment)
 
     if use_cache:

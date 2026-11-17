@@ -90,7 +90,7 @@ load_dotenv()
 # -------------------
 import time
 import random
-from threading import Lock, Semaphore
+from threading import Event, Lock, Semaphore
 from app.utils.groq_rate_limit import GroqBusyError
 
 
@@ -311,7 +311,7 @@ def _resolve_ingest_profile(file_size_mb: float) -> dict:
             "chunk_size": int(os.getenv("RAG_LARGE_CHUNK_SIZE", "3000")),
             "chunk_overlap": int(os.getenv("RAG_LARGE_CHUNK_OVERLAP", "120")),
             "max_chunks": int(os.getenv("RAG_LARGE_MAX_CHUNKS", "1800")),
-            "retrieval_k": int(os.getenv("RAG_LARGE_RETRIEVAL_K", "4")),
+            "retrieval_k": int(os.getenv("RAG_LARGE_RETRIEVAL_K", "8")),
             "threshold_mb": threshold_mb,
         }
     return {
@@ -457,7 +457,7 @@ def _resolve_thread_retrieval_k(thread_id: str, user_id: int) -> int:
         with _thread_ingest_profiles_lock:
             entry = _thread_ingest_profiles.get(str(thread_id))
         if entry and entry.get("profile") == "large":
-            return int(os.getenv("RAG_LARGE_RETRIEVAL_K", str(entry.get("retrieval_k", 4))))
+            return int(os.getenv("RAG_LARGE_RETRIEVAL_K", str(entry.get("retrieval_k", 8))))
     except Exception:
         pass
 
@@ -468,7 +468,7 @@ def _resolve_thread_retrieval_k(thread_id: str, user_id: int) -> int:
             num_pages = int(getattr(thread_row, "num_pages", 0) or 0)
             large_page_threshold = int(os.getenv("RAG_LARGE_DOC_PAGE_THRESHOLD", "220"))
             if num_pages >= large_page_threshold:
-                return int(os.getenv("RAG_LARGE_RETRIEVAL_K", "4"))
+                return int(os.getenv("RAG_LARGE_RETRIEVAL_K", "8"))
     except Exception as e:
         logger.debug("Could not resolve page-based retrieval k for thread %s: %s", thread_id, e)
 
@@ -1871,9 +1871,116 @@ _ACTIVE_RAG_THREAD: "contextvars.ContextVar[Optional[str]]" = contextvars.Contex
 )
 
 
+class _RagInFlightResult:
+    """One exact-query computation shared by concurrent tool calls in this request."""
+
+    def __init__(self) -> None:
+        self.done = Event()
+        self.result: Any = None
+        self.reusable = False
+
+
+class _RagRequestResultCache:
+    """Bounded successful-result memo; a new instance is created for every chat request."""
+
+    def __init__(self) -> None:
+        self.lock = Lock()
+        self.results: Dict[Tuple[str, str], str] = {}
+        self.inflight: Dict[Tuple[str, str], _RagInFlightResult] = {}
+        self.total_chars = 0
+
+
+_RAG_REQUEST_RESULT_CACHE: "contextvars.ContextVar[Optional[_RagRequestResultCache]]" = (
+    contextvars.ContextVar("rag_request_result_cache", default=None)
+)
+
+
+def _exact_rag_query_key(query: str) -> str:
+    """Preserve the raw query so only literal duplicate retrievals can reuse evidence."""
+    return str(query or "")
+
+
+def _is_successful_rag_evidence(result: Any) -> bool:
+    """Cache only completed citation-ready evidence, never errors or empty retrievals."""
+    return (
+        isinstance(result, str)
+        and result.startswith("Relevant content from the PDF (citation-ready evidence):")
+        and "[Evidence " in result
+    )
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _run_rag_tool_with_request_cache(query: str, thread_id: Optional[str], compute):
+    """Reuse only exact successful retrievals inside the current verified chat request.
+
+    The first caller executes the unchanged retrieval path. Concurrent identical callers
+    join that in-flight work; later identical calls receive its byte-for-byte output. The
+    memo is request-scoped, bounded, and cleared by ``reset_active_rag_thread``.
+    """
+    memo = _RAG_REQUEST_RESULT_CACHE.get()
+    active_thread = _ACTIVE_RAG_THREAD.get()
+    thread_key = str(thread_id) if thread_id is not None else ""
+    query_key = _exact_rag_query_key(query)
+    if memo is None or not active_thread or thread_key != active_thread or not query_key:
+        return compute()
+
+    key = (thread_key, query_key)
+    with memo.lock:
+        cached = memo.results.get(key)
+        if cached is not None:
+            logger.info("RAG request result cache hit: thread_id=%s", thread_key)
+            return cached
+        flight = memo.inflight.get(key)
+        owner = flight is None
+        if owner:
+            flight = _RagInFlightResult()
+            memo.inflight[key] = flight
+
+    if not owner:
+        logger.info("RAG request result single-flight join: thread_id=%s", thread_key)
+        flight.done.wait()
+        # A failed/partial owner must not suppress the waiter's normal independent
+        # retrieval. Only completed citation-ready evidence is safe to share.
+        if flight.reusable:
+            return flight.result
+        return compute()
+
+    try:
+        result = compute()
+    except BaseException as exc:
+        with memo.lock:
+            memo.inflight.pop(key, None)
+            flight.done.set()
+        raise
+
+    with memo.lock:
+        reusable = _is_successful_rag_evidence(result)
+        if reusable:
+            max_entries = _positive_int_env("RAG_REQUEST_RESULT_CACHE_MAX_ENTRIES", 16)
+            max_chars = _positive_int_env("RAG_REQUEST_RESULT_CACHE_MAX_CHARS", 2_000_000)
+            result_chars = len(result)
+            if len(memo.results) < max_entries and memo.total_chars + result_chars <= max_chars:
+                memo.results[key] = result
+                memo.total_chars += result_chars
+        memo.inflight.pop(key, None)
+        flight.result = result
+        flight.reusable = reusable
+        flight.done.set()
+    return result
+
+
 def set_active_rag_thread(thread_id: Optional[str]):
     """Pin document access for this request to `thread_id`. Returns a reset token."""
-    return _ACTIVE_RAG_THREAD.set(str(thread_id) if thread_id else None)
+    resolved = str(thread_id) if thread_id else None
+    token = _ACTIVE_RAG_THREAD.set(resolved)
+    _RAG_REQUEST_RESULT_CACHE.set(_RagRequestResultCache() if resolved else None)
+    return token
 
 
 def reset_active_rag_thread(token) -> None:
@@ -1881,6 +1988,9 @@ def reset_active_rag_thread(token) -> None:
         _ACTIVE_RAG_THREAD.reset(token)
     except (ValueError, LookupError):
         _ACTIVE_RAG_THREAD.set(None)
+    finally:
+        # Results must never leak into another user turn handled by this worker thread.
+        _RAG_REQUEST_RESULT_CACHE.set(None)
 
 
 
@@ -2021,20 +2131,61 @@ def _get_retriever(thread_id: Optional[str], user_id: Optional[int] = None, step
                     qprev.replace("\n", " "),
                 )
             _step("retriever_fetch_chunks_start")
-            chunk_ids = [r["chunk_id"] for r in results if r.get("chunk_id") is not None]
+            max_context_chunks = max(1, int(os.getenv("RAG_MAX_CONTEXT_CHUNKS", "24")))
+            chunk_ids = []
+            # First preserve every ranked aspect's primary hit. Then distribute
+            # query-focused parent evidence and remaining neighbors round-robin,
+            # so the first hit cannot consume the whole context budget.
+            for result_row in results:
+                chunk_id = result_row.get("chunk_id")
+                if chunk_id is not None and chunk_id not in chunk_ids:
+                    chunk_ids.append(chunk_id)
+                if len(chunk_ids) >= max_context_chunks:
+                    break
+            context_lists = []
+            for result_row in results:
+                primary_id = result_row.get("chunk_id")
+                support_ids = result_row.get("supporting_context_chunk_ids") or []
+                parent_ids = result_row.get("context_chunk_ids") or []
+                context_lists.append(
+                    list(dict.fromkeys(
+                        chunk_id
+                        for chunk_id in list(support_ids) + list(parent_ids)
+                        if chunk_id is not None and chunk_id != primary_id
+                    ))
+                )
+            max_depth = max((len(values) for values in context_lists), default=0)
+            for depth in range(max_depth):
+                for values in context_lists:
+                    if depth >= len(values):
+                        continue
+                    chunk_id = values[depth]
+                    if chunk_id not in chunk_ids:
+                        chunk_ids.append(chunk_id)
+                    if len(chunk_ids) >= max_context_chunks:
+                        break
+                if len(chunk_ids) >= max_context_chunks:
+                    break
             chunk_map = fetch_chunks_by_ids(chunk_ids) if chunk_ids else {}
             _step("retriever_build_docs_start")
             docs = []
-            for r in results:
-                cid = r.get("chunk_id")
-                c = chunk_map.get(cid) if cid else {}
+            for cid in chunk_ids:
+                c = chunk_map.get(cid) or {}
                 doc = Document(
                     page_content=c.get("text", ""),
-                    metadata={"source": c.get("source", ""), "page": r.get("page", 0), "chunk_index": r.get("chunk_index", 0)},
+                    metadata={
+                        "source": c.get("source", ""),
+                        "page": c.get("page", 0),
+                        "page_end": c.get("page_end", c.get("page", 0)),
+                        "chunk_index": c.get("chunk_index", 0),
+                    },
                 )
                 docs.append(doc)
             _step("retriever_done")
-            logger.info("VectorRetriever: returned %d documents for thread_id=%s", len(docs), self.thread_id)
+            logger.info(
+                "VectorRetriever: returned %d parent-context documents from %d ranked hits for thread_id=%s",
+                len(docs), len(results), self.thread_id,
+            )
             return docs
 
     use_hybrid = os.getenv("USE_HYBRID_RAG", "true").lower() in ("true", "1", "yes")
@@ -3844,8 +3995,7 @@ def _strip_metadata_like_lines(text: str) -> str:
     return "\n".join(kept).strip() or text
 
 
-@tool
-def rag_tool(query: str, thread_id: Optional[str] = None):
+def _rag_tool_uncached(query: str, thread_id: Optional[str] = None):
     """
     Retrieve relevant information from the uploaded PDF for this chat thread.
     Always include the thread_id when calling this tool.
@@ -3986,11 +4136,21 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
             continue
         cleaned_chunks.append(cleaned_text)
         page_val = (chunk_meta or {}).get("page")
+        page_end_val = (chunk_meta or {}).get("page_end", page_val)
         source_val = (chunk_meta or {}).get("source") or source_file
         chunk_idx_val = (chunk_meta or {}).get("chunk_index")
 
         try:
-            page_label = str(int(page_val)) if page_val is not None and str(page_val).strip() else "unknown"
+            if page_val is not None and str(page_val).strip():
+                page_start_num = int(page_val)
+                page_end_num = int(page_end_val) if page_end_val is not None else page_start_num
+                page_label = (
+                    str(page_start_num)
+                    if page_end_num == page_start_num
+                    else f"{page_start_num}-{page_end_num}"
+                )
+            else:
+                page_label = "unknown"
         except Exception:
             page_label = str(page_val).strip() if page_val is not None else "unknown"
         chunk_label = str(chunk_idx_val) if chunk_idx_val is not None else str(idx - 1)
@@ -4005,7 +4165,12 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
         f"{content_block}\n\n"
         "Citation policy for this evidence:\n"
         "- Cite only page numbers that appear in the evidence headers above.\n"
-        "- If page is unknown, cite using section/source wording instead of inventing a page number.\n\n"
+        "- If page is unknown, cite using section/source wording instead of inventing a page number.\n"
+        "- For a requested year, version, or effective date, use provisions explicitly applicable to that period; "
+        "do not combine current, amended, substituted, omitted, or historical tables as if they were one rule.\n"
+        "- For calculations, every rate, threshold, and applicability condition must come from this evidence.\n"
+        "- If provisions conflict or a requested component is missing, say the document evidence is insufficient "
+        "or ambiguous instead of guessing a definitive answer.\n\n"
         f"Source file: {source_file}. Total pages: {num_pages or 'unknown'}."
     )
     _rag_step("build_content_for_llm")
@@ -4021,6 +4186,20 @@ def rag_tool(query: str, thread_id: Optional[str] = None):
 
     _write_speed_log("rag_tool", thread_id, rag_steps, rag_started)
     return content_for_llm
+
+
+@tool
+def rag_tool(query: str, thread_id: Optional[str] = None):
+    """
+    Retrieve relevant information from the uploaded PDF for this chat thread.
+    Always include the thread_id when calling this tool.
+    Returns content-only text for the LLM (no internal metadata).
+    """
+    return _run_rag_tool_with_request_cache(
+        query,
+        thread_id,
+        lambda: _rag_tool_uncached(query=query, thread_id=thread_id),
+    )
 
 
 def _prefetch_lecture_evidence_for_chat(thread_id: str, user_query: str) -> str:
@@ -5295,6 +5474,22 @@ RAG_REPLY_FORMATTING_INSTRUCTIONS = (
     "formatting rules and the user's request; always give the real answer."
 )
 
+# Always appended even when an administrator has replaced the editable RAG body.
+# These are source-authority rules, not presentation preferences, so a stale admin
+# template must not be able to remove them accidentally.
+RAG_DOCUMENT_GROUNDING_INSTRUCTIONS = (
+    "<document_grounding_policy>\n"
+    "- Evidence authority: For claims about the document, use only retrieved evidence; do not fill gaps from memory.\n"
+    "- Claim fit: Use evidence that directly entails each material claim and matches its named subject or entity, "
+    "event, scope, date, version or status, units, conditions, exceptions, definitions, negation, and source "
+    "certainty/modality. Never turn a general rule or example into an entity-specific fact, or may/can into must/is.\n"
+    "- Synthesis: Do not merge incompatible passages. If evidence conflicts, distinguish the sources and scopes.\n"
+    "- Completeness and citations: Cite each material claim using only its supporting evidence's provided citation. "
+    "Claim completeness only when evidence establishes it. If required evidence is missing, ambiguous, conflicting, "
+    "or inapplicable, state what cannot be established and limit the answer; never guess.\n"
+    "</document_grounding_policy>"
+)
+
 # Always appended after the admin body. Production admin prompts can omit tools that exist in
 # code (confirmed live: rag_chat_system_body_with_pdf listed rag_tool/finalize_lesson_tool but
 # not update_lesson_tool), which makes the executor agent skip the correct tool. Industry
@@ -5693,17 +5888,19 @@ def _chat_build_system_message(
                 page_info=page_info,
                 thread_id=thread_id_str or "",
             )
-            # Admin template first; then formatting hint; then code tool catalog (not overridable
-            # by an incomplete admin prompt); then teacher customizations.
+            # Teacher preferences are intentionally followed by the immutable product tool and
+            # grounding contracts so customization cannot weaken source authority.
             base_content = (
                 f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
+                f"---\n\nTeacher additional instructions:\n{custom_resolved}\n\n"
                 f"---\n\n{RAG_CODE_TOOL_CATALOG}\n\n"
-                f"---\n\nTeacher additional instructions:\n{custom_resolved}"
+                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}"
             )
         else:
             base_content = (
                 f"{rag_body}\n\n---\n\n{RAG_REPLY_FORMATTING_INSTRUCTIONS}\n\n"
-                f"---\n\n{RAG_CODE_TOOL_CATALOG}"
+                f"---\n\n{RAG_CODE_TOOL_CATALOG}\n\n"
+                f"---\n\n{RAG_DOCUMENT_GROUNDING_INSTRUCTIONS}"
             )
 
         system_message = SystemMessage(content=base_content)

@@ -146,6 +146,11 @@ def test_frontend_polls_progress_endpoint_and_updates_indicator():
     assert "/api/rag/chat-progress/" in DASHBOARD_SRC
     assert "function updateTypingIndicatorText(message)" in DASHBOARD_SRC
     assert 'id="typing-indicator-text"' in DASHBOARD_SRC
+    assert "setTimeout(pollChatProgress, 1500)" in DASHBOARD_SRC
+    assert "setInterval(async function" not in DASHBOARD_SRC
+    assert "generation !== _chatProgressPollGeneration" in DASHBOARD_SRC
+    assert "updateTypingIndicatorText('AI is thinking...')" in DASHBOARD_SRC
+    assert "elapsedSeconds" in DASHBOARD_SRC
 
 
 def test_frontend_starts_polling_on_send_and_stops_in_finally():

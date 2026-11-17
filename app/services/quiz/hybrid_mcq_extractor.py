@@ -109,6 +109,7 @@ def vision_mcq_to_question(mcq) -> Optional[MCQQuestion]:
             explanation=explanation,
             learning_concept=learning_concept,
             domain=domain,
+            topic=topic,
             difficulty=_normalize_difficulty(getattr(mcq, "difficulty", None)),
             cognitive_level=cognitive,
             printed_difficulty=(

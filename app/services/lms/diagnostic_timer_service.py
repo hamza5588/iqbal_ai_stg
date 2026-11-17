@@ -97,7 +97,10 @@ def _apply_estimates(assessment_id: int, estimates: List[QuestionTimeEstimate]) 
         q = db.query(Question).filter(Question.id == qid).first()
         if not q:
             continue
-        q.difficulty = est.difficulty
+        # Metadata imported/classified for adaptive practice must not be replaced
+        # by an independent estimate of reading time.
+        if not q.cognitive_level:
+            q.difficulty = est.difficulty
         q.time_limit_seconds = _clamp_seconds(est.time_limit_seconds)
         total += q.time_limit_seconds
     buffered = total * (1 + _BUFFER_RATIO)

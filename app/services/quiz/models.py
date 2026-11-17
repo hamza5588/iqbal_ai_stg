@@ -71,6 +71,8 @@ class MCQOption(BaseModel):
 
 
 class MCQQuestion(BaseModel):
+    topic: Optional[str] = None
+    cognitive_level: Optional[str] = None
     question_text: str
     question_latex: Optional[str] = None
     options: List[MCQOption]

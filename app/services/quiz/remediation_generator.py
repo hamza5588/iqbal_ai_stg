@@ -51,6 +51,8 @@ def generate_remediation_mcqs(
     purpose: str = "practice",
     exclude_question_texts: Optional[List[str]] = None,
     grade_level: Optional[str] = None,
+    domain: Optional[str] = None,
+    cognitive_level: Optional[str] = None,
 ) -> List[MCQQuestion]:
     """Generate topic-targeted practice MCQs distinct from diagnostic items."""
     if count < 1:
@@ -83,6 +85,13 @@ def generate_remediation_mcqs(
             exclude_block=exclude_block,
             retry_hint=retry_hint,
         )
+        if domain:
+            prompt += (
+                f"\nRequired metadata for EVERY question: domain={domain}; topic={topic_name}; "
+                f"cognitive_level={cognitive_level}; difficulty={difficulty}. "
+                "Keep the content strictly inside this subject domain and topic. "
+                "Return all four metadata fields exactly as requested."
+            )
         batch: MCQBatchResult = invoke_with_groq_rate_limit(
             lambda: invoke_structured(llm, MCQBatchResult, prompt),
             description=f"remediation MCQ gen ({topic_name})",

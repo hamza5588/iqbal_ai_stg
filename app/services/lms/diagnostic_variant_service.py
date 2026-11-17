@@ -353,6 +353,8 @@ def _generate_and_store_variant(assessment_id: int, orig_id: int) -> Optional[in
                 correct_option_index=v["correct_index"],
                 topic_id=orig.topic_id,
                 difficulty=orig.difficulty or "medium",
+                domain=orig.domain,
+                topic_label=orig.topic_label,
                 source_type=VARIANT_SOURCE_TYPE,
                 # Same printed concept as the original -> same matching parameters.
                 cognitive_level=getattr(orig, "cognitive_level", None) or None,
