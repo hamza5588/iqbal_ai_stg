@@ -62,6 +62,53 @@ def test_seconds_helpers():
     assert tts.seconds_to_hms(65) == "0:01:05"
     assert tts.seconds_to_hms(3661) == "1:01:01"
     assert tts.seconds_to_minutes(90) == 1.5
+    assert tts._nonneg_seconds(-12) == 0
+    assert tts._nonneg_seconds("40") == 40
+    assert tts._nonneg_seconds("nope") == 0
+
+
+def test_quiz_clamps_negative_dwell_and_nulls_inverted_wall(db):
+    _student(db)
+    topic = Topic(name="Clamp", slug="clamp-tt", subject="Mathematics", grade_level="9")
+    db.add(topic)
+    db.flush()
+    q1 = Question(
+        topic_id=topic.id,
+        question_text="Q1?",
+        options_json='[{"label":"A","text":"1"},{"label":"B","text":"2"},{"label":"C","text":"3"},{"label":"D","text":"4"}]',
+        correct_option_index=0,
+        difficulty="easy",
+        source_type="manual",
+    )
+    assessment = Assessment(title="Clamp Quiz", assessment_type="quiz", creation_mode="manual", status="published")
+    db.add_all([q1, assessment])
+    db.flush()
+    db.add(AssessmentQuestion(assessment_id=assessment.id, question_id=q1.id, sort_order=1))
+    attempt = AssessmentAttempt(
+        student_id=2,
+        assessment_id=assessment.id,
+        status="submitted",
+        started_at=datetime(2026, 10, 29, 8, 0),
+        submitted_at=datetime(2026, 10, 29, 7, 0),  # inverted
+    )
+    db.add(attempt)
+    db.flush()
+    answer = AttemptAnswer(
+        attempt_id=attempt.id, question_id=q1.id, selected_option_index=0, is_correct=True, time_spent_seconds=-9
+    )
+    db.add(answer)
+    db.flush()
+    timing = tts.quiz_attempt_timing(attempt, [answer], [q1.id])
+    assert timing["wall_clock_seconds"] is None
+    assert timing["question_dwell_total_seconds"] == 0
+    assert timing["questions"][0]["time_spent_seconds"] == 0
+
+    chat = DeficiencyChatSession(
+        student_id=2,
+        questions_json='[{"id":1,"time_spent_seconds":-5},{"id":2,"time_spent_seconds":12}]',
+        status="completed",
+    )
+    assert tts.learning_chat_session_timing(chat)["total_time_spent_seconds"] == 12
 
 
 def test_quiz_attempt_timing_wall_clock_and_per_mcq(db):

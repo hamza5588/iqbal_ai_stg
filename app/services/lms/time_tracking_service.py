@@ -61,17 +61,29 @@ def window_utc(previous_day: Optional[date], quiz_day: date) -> tuple[datetime, 
     return start, end
 
 
+def _nonneg_seconds(value) -> int:
+    """Coerce a dwell field to a non-negative int (bad/negative client values → 0)."""
+    if value is None:
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
 def quiz_attempt_timing(attempt: AssessmentAttempt, answers: Iterable[AttemptAnswer], ordered_question_ids: list[int]) -> dict:
     """Total wall-clock quiz time plus per-MCQ dwell."""
     wall_seconds = None
     if attempt.started_at and attempt.submitted_at and attempt.submitted_at >= attempt.started_at:
         wall_seconds = int((attempt.submitted_at - attempt.started_at).total_seconds())
+        if wall_seconds < 0:
+            wall_seconds = None
     by_qid = {a.question_id: a for a in answers}
     questions = []
     dwell_total = 0
     for number, qid in enumerate(ordered_question_ids, 1):
         row = by_qid.get(qid)
-        sec = int(row.time_spent_seconds or 0) if row else 0
+        sec = _nonneg_seconds(row.time_spent_seconds) if row else 0
         dwell_total += sec
         questions.append(
             {
@@ -109,10 +121,7 @@ def learning_chat_session_timing(session: DeficiencyChatSession) -> dict:
     for idx, q in enumerate(_parse_chat_questions(session.questions_json), 1):
         if not isinstance(q, dict):
             continue
-        try:
-            sec = max(0, int(q.get("time_spent_seconds") or 0))
-        except (TypeError, ValueError):
-            sec = 0
+        sec = _nonneg_seconds(q.get("time_spent_seconds"))
         total += sec
         questions.append(
             {
@@ -141,7 +150,7 @@ def guided_practice_item_timing(attempt: GuidedPracticeAttempt) -> dict:
         "attempt_id": attempt.id,
         "student_id": attempt.student_id,
         "bank_item_id": attempt.bank_item_id,
-        "time_spent_seconds": int(attempt.time_spent_seconds or 0),
+        "time_spent_seconds": _nonneg_seconds(attempt.time_spent_seconds),
         "answered_at": attempt.answered_at.isoformat() if attempt.answered_at else None,
         "is_correct": attempt.is_correct,
     }
@@ -155,7 +164,7 @@ def aigp_item_timing(session: AIGPSession, item: AIGPSessionItem) -> dict:
         "item_id": item.id,
         "question_id": item.question_id,
         "position": item.position,
-        "time_spent_seconds": int(item.time_spent_seconds or 0),
+        "time_spent_seconds": _nonneg_seconds(item.time_spent_seconds),
         "answered_at": item.answered_at.isoformat() if item.answered_at else None,
         "is_correct": item.is_correct,
     }
