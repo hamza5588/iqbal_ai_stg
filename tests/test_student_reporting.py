@@ -179,15 +179,18 @@ def test_report_uses_latest_attempt_actual_answers_topics_and_usage(db):
     result = report["files"][0]["results"][0]
     assert result[7:12] == [1, 1, 0, 1.0, 15.0]
     assert RESULT_HEADERS[-1] == "Quiz Time Taken (Minutes)"
-    assert QUIZ_HEADERS[20:27] == [
+    assert QUIZ_HEADERS[20:28] == [
         "Question No", "Domain", "Topic", "Question", "Student Selected", "Correct Answer", "Is Correct",
+        "Question Time (Seconds)",
     ]
     assert report["files"][0]["topics"][0][2:] == ["", "Algebra", 1, 1, 1.0]
     assert report["files"][0]["answers"][0][2:5] == ["Q1", "", "Algebra"]
-    assert report["files"][0]["answers"][0][6:] == ["B", "B", "Yes"]
+    assert report["files"][0]["answers"][0][6:9] == ["B", "B", "Yes"]
     long_row = report["files"][0]["rows"][0]
     assert long_row[0] == "Ayesha"
     assert long_row[20:27] == ["Q1", "", "Algebra", long_row[23], "B", "B", "Yes"]
+    assert "time_tracking" in report
+    assert report["time_tracking"]["quiz_attempts"][0]["wall_clock_minutes"] == 15.0
     assert report["learning_usage"]
     assert report["learning_usage"][0][:4] == [date(2026, 10, 29), 2, "Ayesha", "School A"]
     assert report["attempt_rule"].startswith("Selected assessment:")
@@ -303,7 +306,7 @@ def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
     assert "Student group" in primary and "Test date" in primary and "Assessment" in primary and "School" in primary
     assert "Cohort" not in primary and "Test type" not in primary and "FollowUp order" not in template
     assert 'id="sr-cohort" value="default"' in template
-    assert "student-reporting.js') }}?v=20261119analyticsfmt" in dashboard
+    assert "student-reporting.js') }}?v=20261119timetrack1" in dashboard
 
 
 def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
@@ -317,11 +320,11 @@ def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
         "rows": [[
             "=unsafe", "student@example.com", "School", "Controlled", "Baseline", date(2026, 10, 29),
             "Test", 1, 1, 0, 1.0, 5.0, None, None, None, None, None, None, 2, None,
-            "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes",
+            "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes", 12,
         ]],
         "results": [["=unsafe", "student@example.com", "School", "Controlled", "Baseline", date(2026, 10, 29), "Test", 1, 1, 0, 1.0, 5.0]],
         "topics": [["Student", "student@example.com", "Algebra", "Algebraic Formulas/Identities", 1, 1, 1.0]],
-        "answers": [["Student", "student@example.com", "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes"]],
+        "answers": [["Student", "student@example.com", "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes", 12]],
     }
     stream = workbook_for_file(file_data)
     workbook = load_workbook(stream, data_only=False)
@@ -332,6 +335,7 @@ def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
     assert sheet["A2"].data_type == "s"  # formula injection is neutralized
     assert sheet["U2"].value == "Q1"
     assert sheet["Y2"].value == "B"
+    assert sheet["AB2"].value == 12
     second = {
         **file_data,
         "group": "Uncontrolled",
@@ -339,12 +343,13 @@ def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
         "filename": "Uncontrolled_Baseline_2026-10-29.xlsx",
         "rows": [[
             "Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026, 10, 29),
-            "Test B", 1, 0, 1, 0.0, 4.0, None, None, "0:00:00", None, 0.0, 0, 3, "2026-10-29: total 0 [quiz day, not counted]",
-            "Q1", "Numbers", "Laws of Exponents", "3+3?", "A", "B", "No",
+            "Test B", 1, 0, 1, 0.0, 4.0, None, None, "0:05:00", "0:03:00", 0.0, 0, 3,
+            "2026-10-29: chat 0:05:00, practice 0:03:00, total 0 [quiz day, not counted]",
+            "Q1", "Numbers", "Laws of Exponents", "3+3?", "A", "B", "No", 8,
         ]],
         "results": [["Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026, 10, 29), "Test B", 1, 0, 1, 0.0, 4.0]],
         "topics": [["Second", "second@example.com", "Numbers", "Laws of Exponents", 0, 1, 0.0]],
-        "answers": [["Second", "second@example.com", "Q1", "Numbers", "Laws of Exponents", "3+3?", "A", "B", "No"]],
+        "answers": [["Second", "second@example.com", "Q1", "Numbers", "Laws of Exponents", "3+3?", "A", "B", "No", 8]],
     }
     report = {
         "files": [file_data, second],

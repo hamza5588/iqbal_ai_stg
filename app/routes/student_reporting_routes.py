@@ -182,6 +182,8 @@ def report_classification(assessment_id):
 def report_preview():
     try:
         report = build_report(get_db(), _body())
+        timing = report.get("time_tracking") or {}
+        students_timing = timing.get("students") or []
         return jsonify(
             success=True,
             filters=report["filters"], matching_students=report["matching_students"],
@@ -193,6 +195,37 @@ def report_preview():
                     "question_rows": len(item.get("rows") or []),
                     "group": item["group"], "test_type": item["test_type"],
                     "test_date": item["test_date"].isoformat()} for item in report["files"]],
+            time_tracking={
+                "sources": timing.get("sources") or {},
+                "student_count": len(students_timing),
+                "students": [
+                    {
+                        "student_id": s.get("student_id"),
+                        "name": s.get("name"),
+                        "email": s.get("email"),
+                        "learning_chat_seconds": s.get("learning_chat_seconds"),
+                        "learning_chat_hms": s.get("learning_chat_hms"),
+                        "ai_guided_practice_seconds": s.get("ai_guided_practice_seconds"),
+                        "ai_guided_practice_hms": s.get("ai_guided_practice_hms"),
+                        "quiz_count": len(s.get("quizzes") or []),
+                        "quizzes": [
+                            {
+                                "attempt_id": q.get("attempt_id"),
+                                "test_type": q.get("test_type"),
+                                "test_date": q.get("test_date"),
+                                "wall_clock_seconds": q.get("wall_clock_seconds"),
+                                "wall_clock_minutes": q.get("wall_clock_minutes"),
+                                "question_dwell_total_seconds": q.get("question_dwell_total_seconds"),
+                                "question_count": len(q.get("questions") or []),
+                                "learning_chat_seconds": q.get("learning_chat_seconds"),
+                                "ai_guided_practice_seconds": q.get("ai_guided_practice_seconds"),
+                            }
+                            for q in (s.get("quizzes") or [])
+                        ],
+                    }
+                    for s in students_timing
+                ],
+            },
         )
     except ValueError as exc:
         return jsonify(error=str(exc)), 400

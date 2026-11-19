@@ -30,6 +30,7 @@ from app.models.lms_models import (
     StudentStudyGroupAudit,
     Topic,
 )
+from app.services.lms import time_tracking_service
 
 
 REPORT_ZONE = ZoneInfo("Asia/Karachi")
@@ -66,13 +67,14 @@ QUIZ_HEADERS = [
     "Student Selected",
     "Correct Answer",
     "Is Correct",
+    "Question Time (Seconds)",
 ]
 # Back-compat aliases used by older unit tests / imports.
 RESULT_HEADERS = QUIZ_HEADERS[:12]
 TOPIC_HEADERS = ["Student Name", "Email", "Domain", "Topic", "Correct", "Total", "Score %"]
 ANSWER_HEADERS = [
     "Student Name", "Email", "Question No", "Domain", "Topic", "Question",
-    "Student Selected", "Correct Answer", "Is Correct",
+    "Student Selected", "Correct Answer", "Is Correct", "Question Time (Seconds)",
 ]
 LEARNING_USAGE_HEADERS = [
     "Date", "Student ID", "Student Name", "School Name", "AI Tutor Time", "Active Minutes", "Coverage",
@@ -592,20 +594,24 @@ def _learning_since_previous(
     previous_day: date | None,
     usage_map: dict[tuple[int, date], int],
     track_start: date | None,
+    learning_chat_seconds: int = 0,
+    ai_guided_practice_seconds: int = 0,
 ) -> tuple[str | None, str | None, float | None, int | None, str | None]:
     """Aggregate dil.iqbalai usage between the previous quiz and this quiz day.
 
-    Chat vs AI-Guided Practice are not stored separately in TutorDailyUsage, so those
-    columns stay blank and totals / daily detail use active minutes only — matching the
-    Analytics columns that accept ``total X.X`` without chat/practice splits.
+    Learning Chat / AI-Guided Practice H:M:S come from per-question dwell sums
+    (``time_tracking_service``). Daily total minutes still come from ``tutor_daily_usage.active_ms``.
     """
+    chat_hms = time_tracking_service.seconds_to_hms(learning_chat_seconds) or "0:00:00"
+    practice_hms = time_tracking_service.seconds_to_hms(ai_guided_practice_seconds) or "0:00:00"
     if track_start is None:
-        return None, None, None, None, None
+        # Still expose dwell-based chat/practice even when heartbeat tracking has not started.
+        return chat_hms, practice_hms, None, None, None
     window_start = previous_day + timedelta(days=1) if previous_day else track_start
     if window_start < track_start:
         window_start = track_start
     if window_start > quiz_day:
-        return "0:00:00", None, 0.0, 0, None
+        return chat_hms, practice_hms, 0.0, 0, None
 
     detail_parts: list[str] = []
     counted_ms = 0
@@ -619,17 +625,22 @@ def _learning_since_previous(
         ms = int(usage_map.get((student_id, day), 0))
         minutes = round(ms / 60000, 2)
         if day == quiz_day:
-            detail_parts.append(f"{day.isoformat()}: total {minutes} [quiz day, not counted]")
+            detail_parts.append(
+                f"{day.isoformat()}: chat {chat_hms}, practice {practice_hms}, total {minutes} [quiz day, not counted]"
+            )
         else:
             if minutes > 0:
                 days_learned += 1
                 counted_ms += ms
             suffix = " (partial day)" if day == track_start else ""
-            detail_parts.append(f"{day.isoformat()}: total {minutes}{suffix}" if minutes or day == track_start else f"{day.isoformat()}: 0")
+            if minutes or day == track_start:
+                detail_parts.append(f"{day.isoformat()}: total {minutes}{suffix}")
+            else:
+                detail_parts.append(f"{day.isoformat()}: 0")
         day += timedelta(days=1)
 
     total_minutes = round(counted_ms / 60000, 2)
-    return "0:00:00", None, total_minutes, days_learned, "; ".join(detail_parts) if detail_parts else None
+    return chat_hms, practice_hms, total_minutes, days_learned, "; ".join(detail_parts) if detail_parts else None
 
 
 def build_report(db, filters) -> dict:
@@ -777,8 +788,14 @@ def build_report(db, filters) -> dict:
     usage_map = _usage_map_for_students(db, usage_student_ids, start_day - timedelta(days=60), end_day)
     track_start = _tracking_start_day(db)
 
+    # Cache Learning Chat / AI-Guided Practice dwell by (student_id, previous_day, quiz_day).
+    activity_cache: dict[tuple[int, date | None, date], dict] = {}
+    quiz_timing_by_attempt: dict[int, dict] = {}
+    time_tracking_students: dict[str, dict] = {}
+
     files = defaultdict(lambda: {
         "rows": [], "results": [], "topics": [], "answers": [], "assessment_id": None, "title": "",
+        "time_tracking": [],
     })
     scores = []
     for attempt, assessment, student, classification, group in selected:
@@ -795,10 +812,13 @@ def build_report(db, filters) -> dict:
         percentage = correct / total if total else None
         if total == 0:
             warnings.add("Some attempts have no stored grading outcomes; their percentages are blank.")
-        minutes = None
-        if attempt.started_at and attempt.submitted_at and attempt.submitted_at >= attempt.started_at:
-            minutes = round((attempt.submitted_at - attempt.started_at).total_seconds() / 60, 2)
-        else:
+
+        quiz_timing = time_tracking_service.quiz_attempt_timing(
+            attempt, answer_map.values(), ordered_question_ids[attempt.id]
+        )
+        quiz_timing_by_attempt[attempt.id] = quiz_timing
+        minutes = quiz_timing.get("wall_clock_minutes")
+        if minutes is None:
             warnings.add("Some attempts do not have a reliable duration; Quiz Time Taken is blank.")
         time_away = None
         if getattr(attempt, "offline_credit_seconds", None):
@@ -806,12 +826,32 @@ def build_report(db, filters) -> dict:
 
         earlier = [day for day in prior_days.get(student.id, []) if day < submitted_day]
         previous_day = earlier[-1] if earlier else None
+        activity_key = (student.id, previous_day, submitted_day)
+        if activity_key not in activity_cache:
+            activity_cache[activity_key] = time_tracking_service.activity_times_for_window(
+                db, [student.id], previous_day, submitted_day
+            ).get(student.id) or {
+                "learning_chat_seconds": 0,
+                "ai_guided_practice_seconds": 0,
+                "learning_chat_hms": "0:00:00",
+                "ai_guided_practice_hms": "0:00:00",
+                "learning_chat": {"total_time_spent_seconds": 0, "sessions": [], "questions": []},
+                "ai_guided_practice": {
+                    "total_time_spent_seconds": 0,
+                    "bank_questions": [],
+                    "aigp_questions": [],
+                    "questions": [],
+                },
+            }
+        activity = activity_cache[activity_key]
         chat_hms, practice_hms, total_learn_min, days_learned, daily_detail = _learning_since_previous(
             student_id=student.id,
             quiz_day=submitted_day,
             previous_day=previous_day,
             usage_map=usage_map,
             track_start=track_start,
+            learning_chat_seconds=int(activity.get("learning_chat_seconds") or 0),
+            ai_guided_practice_seconds=int(activity.get("ai_guided_practice_seconds") or 0),
         )
 
         shared = [
@@ -841,8 +881,49 @@ def build_report(db, filters) -> dict:
         if percentage is not None:
             scores.append(percentage)
 
+        student_tt = time_tracking_students.setdefault(
+            str(student.id),
+            {
+                "student_id": student.id,
+                "email": student.useremail,
+                "name": student.full_name or student.username,
+                "quizzes": [],
+                "learning_chat_seconds": 0,
+                "ai_guided_practice_seconds": 0,
+            },
+        )
+        student_tt["quizzes"].append(
+            {
+                "attempt_id": attempt.id,
+                "assessment_id": assessment.id,
+                "test_type": classification.test_type,
+                "test_date": submitted_day.isoformat(),
+                "wall_clock_seconds": quiz_timing.get("wall_clock_seconds"),
+                "wall_clock_minutes": quiz_timing.get("wall_clock_minutes"),
+                "question_dwell_total_seconds": quiz_timing.get("question_dwell_total_seconds"),
+                "questions": quiz_timing.get("questions") or [],
+                "learning_chat_seconds": int(activity.get("learning_chat_seconds") or 0),
+                "ai_guided_practice_seconds": int(activity.get("ai_guided_practice_seconds") or 0),
+                "learning_chat": activity.get("learning_chat"),
+                "ai_guided_practice": activity.get("ai_guided_practice"),
+            }
+        )
+        student_tt["learning_chat_seconds"] = max(
+            int(student_tt["learning_chat_seconds"] or 0),
+            int(activity.get("learning_chat_seconds") or 0),
+        )
+        student_tt["ai_guided_practice_seconds"] = max(
+            int(student_tt["ai_guided_practice_seconds"] or 0),
+            int(activity.get("ai_guided_practice_seconds") or 0),
+        )
+        bucket["time_tracking"].append(student_tt["quizzes"][-1])
+
         topic_totals = defaultdict(lambda: [0, 0])
         question_rows_written = 0
+        q_time_by_number = {
+            int(item["question_number"]): int(item.get("time_spent_seconds") or 0)
+            for item in (quiz_timing.get("questions") or [])
+        }
         for number, question_id in enumerate(ordered_question_ids[attempt.id], 1):
             pair = questions.get(question_id)
             if not pair:
@@ -866,17 +947,18 @@ def build_report(db, filters) -> dict:
                 else ""
             )
             q_text = question.question_text or question.question_latex or ""
+            q_seconds = q_time_by_number.get(number, int(getattr(answer, "time_spent_seconds", 0) or 0) if answer else 0)
             bucket["answers"].append([
                 student.full_name or student.username, student.useremail, f"Q{number}", domain_name, topic_name,
-                q_text, selected_label, correct_label, is_correct,
+                q_text, selected_label, correct_label, is_correct, q_seconds,
             ])
             bucket["rows"].append(shared + [
-                f"Q{number}", domain_name, topic_name, q_text, selected_label, correct_label, is_correct,
+                f"Q{number}", domain_name, topic_name, q_text, selected_label, correct_label, is_correct, q_seconds,
             ])
             question_rows_written += 1
         if question_rows_written == 0:
             # Still emit a student row so Analytics can see the attempt score.
-            bucket["rows"].append(shared + ["", "", "", "", "", "", ""])
+            bucket["rows"].append(shared + ["", "", "", "", "", "", "", None])
         for (domain_name, topic_name), (topic_correct, topic_total) in sorted(topic_totals.items()):
             bucket["topics"].append([
                 student.full_name or student.username, student.useremail, domain_name, topic_name,
@@ -908,6 +990,15 @@ def build_report(db, filters) -> dict:
         seen_student_ids.add(student.id)
         selected_students.append(student)
     learning_usage = _learning_usage_rows(db, selected_students, start_day, end_day)
+
+    for student_data in time_tracking_students.values():
+        student_data["learning_chat_hms"] = time_tracking_service.seconds_to_hms(
+            student_data.get("learning_chat_seconds")
+        )
+        student_data["ai_guided_practice_hms"] = time_tracking_service.seconds_to_hms(
+            student_data.get("ai_guided_practice_seconds")
+        )
+
     return {
         "filters": {"cohort": cohort, "group": group_scope, "start": start_day.isoformat(), "end": end_day.isoformat(),
                     "test_type": type_scope, "assessment_id": assessment_id, "assessment_title": assessment_title,
@@ -917,6 +1008,19 @@ def build_report(db, filters) -> dict:
         "attempts": len(selected), "average_score": (sum(scores) / len(scores) if scores else None),
         "topic_rows": sum(len(item["topics"]) for item in file_list), "files": file_list,
         "learning_usage": learning_usage,
+        "time_tracking": {
+            "students": list(time_tracking_students.values()),
+            "quiz_attempts": list(quiz_timing_by_attempt.values()),
+            "sources": {
+                "quiz_wall_clock": "assessment_attempts.started_at → submitted_at",
+                "quiz_per_question": "attempt_answers.time_spent_seconds",
+                "learning_chat": "deficiency_chat_sessions.questions_json[*].time_spent_seconds",
+                "ai_guided_practice": (
+                    "lms_guided_practice_attempts.time_spent_seconds + "
+                    "lms_aigp_session_items.time_spent_seconds"
+                ),
+            },
+        },
         "warnings": sorted(warnings),
         "diagnostics": {
             "submitted_candidates": len(raw_candidates),
@@ -931,14 +1035,23 @@ def build_report(db, filters) -> dict:
         ),
         "metric_rules": {
             "quiz_minutes": "Minutes from attempt started_at to submitted_at for this quiz.",
+            "question_time_seconds": "Per-MCQ dwell from attempt_answers.time_spent_seconds.",
+            "learning_chat_time": (
+                "Sum of Learning Chat per-question dwell (questions_json.time_spent_seconds) "
+                "since the student's previous quiz."
+            ),
+            "ai_guided_practice_time": (
+                "Sum of bank Guided Practice + AI Guided Practice per-question dwell "
+                "since the student's previous quiz."
+            ),
             "learning_usage": (
-                "Learning columns are total active minutes on dil.iqbalai since the student's previous quiz "
-                "(chat vs AI-Guided Practice are blank when not tracked separately)."
+                "Total Time on dil.iqbalai still comes from tutor_daily_usage.active_ms; "
+                "Learning Chat / AI-Guided Practice columns use dwell sums above."
             ),
             "domain_topic": "Prefer printed Domain/Topic from question taxonomy; otherwise use the linked LMS topic name.",
             "export_format": (
                 "One quiz per workbook, one sheet, one row per student per question — "
-                "same columns as login Analytics / IqbalAI_Dashboard_v23 templates."
+                "Analytics-compatible columns plus Question Time (Seconds)."
             ),
         },
     }
@@ -976,7 +1089,11 @@ def workbook_for_file(file_data) -> io.BytesIO:
             pad = list(base[:12]) + [None] * (20 - 12)
             if len(pad) < 20:
                 pad.extend([None] * (20 - len(pad)))
-            rows.append(pad[:20] + list(answer[2:9]))
+            answer_tail = list(answer[2:])
+            # Expect QNo..Is Correct (+ optional Question Time).
+            while len(answer_tail) < 8:
+                answer_tail.append(None)
+            rows.append(pad[:20] + answer_tail[:8])
     for row in rows:
         values = list(row)
         if len(values) < len(QUIZ_HEADERS):

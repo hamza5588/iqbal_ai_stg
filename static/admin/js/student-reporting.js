@@ -177,7 +177,19 @@
       target.innerHTML = '<p><strong>Selection:</strong> ' + esc(filters.group.replace('_', ' ')) + ' · ' + esc(filters.start) + (filters.end !== filters.start ? ' to ' + esc(filters.end) : '') + '</p>' +
         '<p class="ad-help"><strong>Date rule:</strong> ' + esc(data.attempt_rule) + '</p>' +
         '<div class="sr-stat-grid"><div class="sr-stat"><span>Students</span><strong>' + data.matching_students + '</strong></div><div class="sr-stat"><span>Attempts</span><strong>' + data.attempts + '</strong></div><div class="sr-stat"><span>Average score</span><strong>' + score + '</strong></div></div>' +
-        (data.files.length ? '<h4>Analytics-ready quiz files</h4><p>Each quiz downloads as its own Excel file (one sheet, one row per student per question) named like <code>Controlled_Baseline_YYYY-MM-DD.xlsx</code> so login Analytics can detect group and date. Multiple quizzes come as a ZIP.</p><ul>' + data.files.map(item => '<li>' + esc(item.filename || (item.group + '_' + item.test_type + '_' + item.test_date + '.xlsx')) + ' — ' + item.rows + ' student row(s)</li>').join('') + '</ul>' : '<p class="sr-empty">No matching submitted attempts. No workbook will be generated.</p>') +
+        (data.files.length ? '<h4>Analytics-ready quiz files</h4><p>Each quiz downloads as its own Excel file (one sheet, one row per student per question) named like <code>Controlled_Baseline_YYYY-MM-DD.xlsx</code> so login Analytics can detect group and date. Multiple quizzes come as a ZIP. Includes quiz wall-clock time, per-MCQ dwell, Learning Chat, and AI-Guided Practice totals.</p><ul>' + data.files.map(item => '<li>' + esc(item.filename || (item.group + '_' + item.test_type + '_' + item.test_date + '.xlsx')) + ' — ' + item.rows + ' student row(s)' + (item.question_rows ? ' · ' + item.question_rows + ' question row(s)' : '') + '</li>').join('') + '</ul>' : '<p class="sr-empty">No matching submitted attempts. No workbook will be generated.</p>') +
+        (data.time_tracking && data.time_tracking.students && data.time_tracking.students.length ? '<h4>Time tracking</h4><ul>' + data.time_tracking.students.map(function (s) {
+          var quizzes = (s.quizzes || []).map(function (q) {
+            return esc((q.test_type || 'Quiz') + ' ' + (q.test_date || '')) + ': ' +
+              (q.wall_clock_minutes != null ? q.wall_clock_minutes + ' min quiz' : 'quiz time n/a') +
+              ', ' + (q.question_dwell_total_seconds || 0) + 's question dwell' +
+              ', chat ' + (q.learning_chat_seconds || 0) + 's' +
+              ', practice ' + (q.ai_guided_practice_seconds || 0) + 's';
+          }).join('; ');
+          return '<li><strong>' + esc(s.name || s.email || ('Student ' + s.student_id)) + '</strong> — chat ' +
+            esc(s.learning_chat_hms || '0:00:00') + ', practice ' + esc(s.ai_guided_practice_hms || '0:00:00') +
+            (quizzes ? '<div class="ad-help">' + quizzes + '</div>' : '') + '</li>';
+        }).join('') + '</ul>' : '') +
         (data.warnings.length ? '<div class="sr-warning"><strong>Missing data warnings</strong><ul>' + data.warnings.map(item => '<li>' + esc(item) + '</li>').join('') + '</ul></div>' : '<p class="sr-ok">All requested report data is available.</p>');
     } catch (err) { error.textContent = err.message; target.innerHTML = '<p>Preview could not be generated.</p>'; }
   };
