@@ -70,6 +70,8 @@ tests/*
 !tests/test_student_reporting.py
 !tests/test_time_tracking_service.py
 !tests/test_exam_security.py
+!tests/test_exam_security_extended.py
+!tests/test_exam_security_regression.py
 !app/migrations/
 !app/migrations/__init__.py
 !app/migrations/student_reporting.py
