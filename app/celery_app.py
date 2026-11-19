@@ -35,6 +35,14 @@ celery.conf.update(
     result_expires=3600,
     # Default queue for non-ingest tasks; ingest tasks explicitly use "ingest"
     task_default_queue="default",
+    # Server-authoritative exam expiry (does not rely on the student's browser).
+    beat_schedule={
+        "finalize-expired-exam-attempts": {
+            "task": "app.tasks.lms_tasks.finalize_expired_exam_attempts_task",
+            "schedule": 60.0,
+            "args": (100,),
+        },
+    },
 )
 
 def init_celery(app):

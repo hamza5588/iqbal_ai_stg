@@ -128,6 +128,7 @@
     if (quizDwell) quizDwell.stop();
     if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);
     lmsCloseModal('lmsStudentModal');
+    if (typeof window.lmsExamSecurityStop === 'function') window.lmsExamSecurityStop();
     attemptId = null; questions = []; currentQ = 0; savedAnswers = {};
     remainingSeconds = null; submitting = false;
     show('lmsAssignmentList');
@@ -152,7 +153,12 @@
       var body = await res.json();
       if (!res.ok) {
         var errObj = body.error;
-        throw new Error((errObj && typeof errObj === 'object' && errObj.message) ? errObj.message : (body.error || body.message || 'Start failed'));
+        var code = (errObj && errObj.code) || body.code;
+        var msg = (errObj && typeof errObj === 'object' && errObj.message) ? errObj.message : (body.error || body.message || 'Start failed');
+        if (code === 'seb_required') {
+          msg += ' Download SEB config: /api/lms/quizzes/' + quizId + '/seb-config';
+        }
+        throw new Error(msg);
       }
       var d = body.data || body;
       attemptId = d.attempt_id;
@@ -168,6 +174,14 @@
       }
       await loadQuestions();
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(true);
+      if (typeof window.lmsExamSecurityStart === 'function') {
+        window.lmsExamSecurityStart({
+          attemptId: attemptId,
+          sessionToken: d.session_token,
+          security: d.security,
+          requestFullscreen: true
+        });
+      }
       lmsOpenModal('lmsStudentModal');
       startQuizTimer();
     } catch (err) {
@@ -258,6 +272,7 @@
     render();
     var q = questions[currentQ];
     if (!q || !attemptId) return;
+    if (typeof window.lmsExamSecurityMarkSaving === 'function') window.lmsExamSecurityMarkSaving();
     fetch('/api/lms/attempts/' + attemptId + '/answer', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -266,7 +281,15 @@
         selected_option_index: optIdx,
         time_spent_seconds: quizDwellSeconds(currentQ)
       })
-    }).catch(function () { /* keep local selection */ });
+    }).then(function (r) {
+      if (r && r.ok) {
+        if (typeof window.lmsExamSecurityMarkSaved === 'function') window.lmsExamSecurityMarkSaved();
+      } else if (typeof window.lmsExamSecurityMarkOffline === 'function') {
+        window.lmsExamSecurityMarkOffline();
+      }
+    }).catch(function () {
+      if (typeof window.lmsExamSecurityMarkOffline === 'function') window.lmsExamSecurityMarkOffline();
+    });
   };
   window.goLmsQuizQuestion = function (i) {
     if (i < 0 || i >= questions.length || i === currentQ) return;
@@ -373,6 +396,7 @@
         body: JSON.stringify(payload)
       });
       if (quizDwell) quizDwell.stop();
+      if (typeof window.lmsExamSecurityStop === 'function') window.lmsExamSecurityStop();
       var shownFor = Date.now() - startedAt;
       if (shownFor < 700) await new Promise(function (r) { setTimeout(r, 700 - shownFor); });
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);

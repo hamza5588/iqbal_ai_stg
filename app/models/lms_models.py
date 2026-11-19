@@ -200,6 +200,22 @@ class Assessment(Base):
     # Students who already existed at superseded_at still take it first (if not submitted);
     # brand-new accounts only see the current published diagnostic.
     superseded_at = Column(DateTime, nullable=True)
+    # Exam security (Mode A soft / Mode B SEB / Mode C supervised). Defaults keep
+    # existing quizzes unchanged (standard browser + soft lockdown only).
+    security_mode = Column(String(32), nullable=False, default="standard", server_default="standard")
+    require_seb = Column(Boolean, nullable=False, default=False, server_default="0")
+    allow_resume = Column(Boolean, nullable=False, default=True, server_default="1")
+    max_interruptions = Column(Integer, nullable=True)  # None = unlimited warnings
+    max_concurrent_sessions = Column(Integer, nullable=False, default=1, server_default="1")
+    exam_window_start = Column(DateTime, nullable=True)
+    exam_window_end = Column(DateTime, nullable=True)
+    auto_submit_on_expiry = Column(Boolean, nullable=False, default=True, server_default="1")
+    warn_on_focus_loss = Column(Boolean, nullable=False, default=True, server_default="1")
+    seb_config_key_hash = Column(String(128), nullable=True)
+    seb_browser_exam_keys_json = Column(Text, nullable=True)  # JSON list of BEK hex strings
+    seb_quit_password_hash = Column(String(128), nullable=True)
+    seb_quit_link_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    security_policy_json = Column(Text, nullable=True)  # optional extra knobs
     created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(
         DateTime,
@@ -237,6 +253,10 @@ class Assessment(Base):
         CheckConstraint(
             "status IN ('draft','published','archived')",
             name="check_assessment_status",
+        ),
+        CheckConstraint(
+            "security_mode IN ('standard','seb','supervised')",
+            name="check_assessment_security_mode",
         ),
     )
 
@@ -423,6 +443,15 @@ class AssessmentAttempt(Base):
     # offline time were already added back to expires_at (diagnostics only, capped).
     last_seen_at = Column(DateTime, nullable=True)
     offline_credit_seconds = Column(Integer, nullable=False, default=0, server_default="0")
+    # Exam security session binding (server-authoritative).
+    session_token = Column(String(64), nullable=True, index=True)
+    security_mode = Column(String(32), nullable=True)
+    seb_verified = Column(Boolean, nullable=False, default=False, server_default="0")
+    interruption_count = Column(Integer, nullable=False, default=0, server_default="0")
+    focus_loss_count = Column(Integer, nullable=False, default=0, server_default="0")
+    client_fingerprint = Column(String(128), nullable=True)
+    last_security_event_at = Column(DateTime, nullable=True)
+    finalized_reason = Column(String(64), nullable=True)  # submit|timeout|policy|invigilator
 
     answers = relationship(
         "AttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"
@@ -433,6 +462,35 @@ class AssessmentAttempt(Base):
             "status IN ('in_progress','submitted','abandoned')",
             name="check_attempt_status",
         ),
+    )
+
+
+class ExamSecurityEvent(Base):
+    """Auditable exam security signals — suspected, not proof of cheating."""
+
+    __tablename__ = "exam_security_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    attempt_id = Column(
+        Integer, ForeignKey("assessment_attempts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    assessment_id = Column(
+        Integer, ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type = Column(String(64), nullable=False, index=True)
+    severity = Column(String(16), nullable=False, default="info", server_default="info")
+    verified = Column(Boolean, nullable=False, default=False, server_default="0")
+    message = Column(String(512), nullable=True)
+    context_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('info','warn','high','critical')",
+            name="check_exam_security_event_severity",
+        ),
+        Index("idx_exam_security_events_attempt_created", "attempt_id", "created_at"),
     )
 
 

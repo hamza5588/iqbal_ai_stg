@@ -749,11 +749,14 @@ def start_quiz_attempt(quiz_id: int):
     body = request.get_json(silent=True) or {}
     assignment_id = body.get("assignment_id")
     try:
+        from app.services.lms import exam_security_service
+
         attempt, resumed, already_completed = attempt_service.start_attempt(
             student_id=_current_user_id(),
             assessment_id=quiz_id,
             assignment_id=assignment_id,
             retake=bool(body.get("retake")),
+            client_fingerprint=(str(body.get("client_fingerprint") or "")[:128] or None),
         )
         if assignment_id:
             assignment_service.link_attempt_to_submission(
@@ -766,6 +769,11 @@ def start_quiz_attempt(quiz_id: int):
             "max_score": attempt.max_score,
             "resumed": resumed,
             "already_completed": already_completed,
+            "session_token": getattr(attempt, "session_token", None),
+            "security": exam_security_service.serialize_policy(
+                assessment_service.get_assessment(quiz_id)
+            ),
+            "seb_verified": bool(getattr(attempt, "seb_verified", False)),
         }
         if already_completed:
             # Diagnostic retakes aren't allowed, but unlike the quiz path
@@ -785,7 +793,8 @@ def start_quiz_attempt(quiz_id: int):
             payload.update(timer)
         return json_success(payload, status=201)
     except LMSValidationError as e:
-        return json_error(str(e), code="validation_error")
+        code = "seb_required" if "Safe Exam Browser" in str(e) else "validation_error"
+        return json_error(str(e), code=code, status=403 if code == "seb_required" else 400)
 
 
 @bp.route("/attempts/<int:attempt_id>/timer", methods=["GET"])
@@ -796,6 +805,120 @@ def get_attempt_timer(attempt_id: int):
         if attempt.student_id != _current_user_id():
             return json_error("Forbidden", code="forbidden", status=403)
         return json_success(attempt_service.get_attempt_timer_info(attempt_id))
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/attempts/<int:attempt_id>/heartbeat", methods=["POST"])
+@login_required
+def attempt_heartbeat(attempt_id: int):
+    if _current_role() != "student":
+        return json_error("Only students can heartbeat attempts", code="forbidden", status=403)
+    try:
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        body = request.get_json(silent=True) or {}
+        return json_success(
+            attempt_service.heartbeat(
+                attempt_id, session_token=body.get("session_token")
+            )
+        )
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error", status=403)
+
+
+@bp.route("/attempts/<int:attempt_id>/security-events", methods=["POST"])
+@login_required
+def post_attempt_security_event(attempt_id: int):
+    if _current_role() != "student":
+        return json_error("Only students can report exam security events", code="forbidden", status=403)
+    try:
+        from app.services.lms import exam_security_service
+
+        attempt = attempt_service.get_attempt(attempt_id)
+        if attempt.student_id != _current_user_id():
+            return json_error("Forbidden", code="forbidden", status=403)
+        if attempt.status != "in_progress":
+            return json_success({"recorded": False, "reason": "attempt_not_active"})
+        body = request.get_json(silent=True) or {}
+        event_type = str(body.get("event_type") or "other")
+        severity = str(body.get("severity") or "info")
+        row = exam_security_service.record_event(
+            attempt,
+            event_type,
+            severity=severity,
+            message=body.get("message"),
+            context=body.get("context") if isinstance(body.get("context"), dict) else {},
+            verified=False,
+        )
+        return json_success(
+            {
+                "recorded": True,
+                "id": row.id,
+                "interruption_count": int(getattr(attempt, "interruption_count", 0) or 0),
+                "focus_loss_count": int(getattr(attempt, "focus_loss_count", 0) or 0),
+            }
+        )
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/attempts/<int:attempt_id>/security-events", methods=["GET"])
+@login_required
+def get_attempt_security_events(attempt_id: int):
+    try:
+        from app.services.lms import exam_security_service
+
+        attempt = attempt_service.get_attempt(attempt_id)
+        role = _current_role()
+        if attempt.student_id != _current_user_id() and role not in ("teacher", "admin"):
+            return json_error("Forbidden", code="forbidden", status=403)
+        return json_success(
+            {
+                "attempt_id": attempt_id,
+                "summary": exam_security_service.summarize_events(attempt_id),
+                "events": exam_security_service.list_events_for_attempt(attempt_id),
+            }
+        )
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+
+
+@bp.route("/quizzes/<int:quiz_id>/seb-config", methods=["GET"])
+@login_required
+def download_seb_config(quiz_id: int):
+    """Download examination-specific SEB JSON config (open with Safe Exam Browser)."""
+    try:
+        from flask import Response
+        import json as _json
+        from app.services.lms import exam_security_service
+
+        assessment = assessment_service.get_assessment(quiz_id)
+        role = _current_role()
+        uid = _current_user_id()
+        if role == "student":
+            if assessment.assessment_type == "quiz":
+                if not assignment_service.student_is_assigned_quiz(uid, quiz_id):
+                    return json_error("Forbidden", code="forbidden", status=403)
+            elif assessment.assessment_type != "diagnostic":
+                return json_error("Forbidden", code="forbidden", status=403)
+        elif role == "teacher" and assessment.created_by != uid and assessment.assessment_type != "diagnostic":
+            return json_error("Forbidden", code="forbidden", status=403)
+
+        start_url = request.args.get("start_url") or request.host_url.rstrip("/") + "/"
+        cfg = exam_security_service.build_seb_config_dict(assessment, start_url)
+        body = _json.dumps(cfg, indent=2)
+        return Response(
+            body,
+            mimetype="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="iqbalai-exam-{quiz_id}.seb.json"',
+                "Cache-Control": "no-store",
+            },
+        )
     except LMSNotFoundError as e:
         return json_error(str(e), code="not_found", status=404)
 
@@ -1541,12 +1664,29 @@ def get_or_update_quiz(quiz_id: int):
             return denied
         body = request.get_json(silent=True) or {}
         try:
+            from app.services.lms import exam_security_service
+
+            security_keys = {
+                "security_mode",
+                "require_seb",
+                "allow_resume",
+                "max_interruptions",
+                "max_concurrent_sessions",
+                "auto_submit_on_expiry",
+                "warn_on_focus_loss",
+                "exam_window_start",
+                "exam_window_end",
+                "seb_browser_exam_keys",
+                "rotate_seb_config_key",
+            }
+            security_settings = {k: body[k] for k in security_keys if k in body}
             a = assessment_service.update_quiz_settings(
                 quiz_id,
                 teacher_id=_current_user_id(),
                 title=body.get("title"),
                 time_limit_minutes=body.get("time_limit_minutes"),
                 update_time_limit="time_limit_minutes" in body,
+                security_settings=security_settings or None,
             )
             return json_success(
                 {
@@ -1554,6 +1694,7 @@ def get_or_update_quiz(quiz_id: int):
                     "title": a.title,
                     "status": a.status,
                     "time_limit_minutes": a.time_limit_minutes,
+                    "security": exam_security_service.serialize_policy(a),
                 }
             )
         except LMSNotFoundError as e:

@@ -303,6 +303,12 @@ def init_db(app):
                 migrate_ai_guided_practice(engine)
             except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
                 logger.warning("AI guided practice migration warning: %s", e)
+            try:
+                from app.migrations.exam_security import run_migration as migrate_exam_security
+
+                migrate_exam_security(engine)
+            except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
+                logger.warning("exam security migration warning: %s", e)
             from app.services.tutor_usage_service import initialize_tracking
             initialize_tracking(engine)
             

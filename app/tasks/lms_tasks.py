@@ -246,3 +246,42 @@ def enqueue_ai_guided_practice_topup(subtopic_id: int, target_size: int) -> None
     elif _celery_async_enabled():
         logger.warning("Celery broker unreachable; AI Guided Practice top-up %s via thread", subtopic_id)
     _run_in_background_thread(f"aigp-topup-{subtopic_id}", _aigp_topup, subtopic_id, target_size)
+
+
+def finalize_expired_attempts_batch(limit: int = 100) -> dict:
+    """Server-side finalization for expired in-progress attempts (no client required)."""
+    from datetime import datetime
+
+    from app.models.lms_models import AssessmentAttempt
+    from app.services.lms import attempt_service
+    from app.utils.db import get_db
+
+    db = get_db()
+    now = datetime.utcnow()
+    rows = (
+        db.query(AssessmentAttempt)
+        .filter(
+            AssessmentAttempt.status == "in_progress",
+            AssessmentAttempt.expires_at.isnot(None),
+            AssessmentAttempt.expires_at <= now,
+        )
+        .order_by(AssessmentAttempt.expires_at.asc())
+        .limit(max(1, min(int(limit or 100), 500)))
+        .all()
+    )
+    finalized = 0
+    errors = 0
+    for attempt in rows:
+        try:
+            attempt.finalized_reason = attempt.finalized_reason or "timeout"
+            attempt_service.finalize_expired_attempt(attempt.id)
+            finalized += 1
+        except Exception as exc:  # noqa: BLE001
+            errors += 1
+            logger.warning("finalize_expired_attempts_batch failed for %s: %s", attempt.id, exc)
+    return {"scanned": len(rows), "finalized": finalized, "errors": errors}
+
+
+@celery.task(name="app.tasks.lms_tasks.finalize_expired_exam_attempts_task")
+def finalize_expired_exam_attempts_task(limit: int = 100) -> dict:
+    return finalize_expired_attempts_batch(limit=limit)

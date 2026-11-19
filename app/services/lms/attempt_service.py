@@ -175,13 +175,37 @@ def _touch_attempt(attempt: AssessmentAttempt) -> int:
     return credit
 
 
-def heartbeat(attempt_id: int) -> dict:
+def heartbeat(attempt_id: int, *, session_token: Optional[str] = None) -> dict:
     """Ping from the open quiz page: keeps last_seen fresh and returns the authoritative timer."""
+    from app.services.lms import exam_security_service
+
     attempt = get_attempt(attempt_id)
     credited = 0
     if attempt.status == "in_progress":
+        assessment = get_assessment(attempt.assessment_id)
+        if session_token or getattr(attempt, "session_token", None):
+            exam_security_service.require_active_session(
+                attempt, assessment, session_token=session_token
+            )
+        # Re-check SEB on heartbeats for Mode B/C (headers present on each request).
+        policy = exam_security_service.policy_for(assessment)
+        if policy.get("require_seb") and not exam_security_service._seb_bypass_allowed():
+            seb = exam_security_service.verify_seb_headers(assessment)
+            if not seb.get("ok"):
+                exam_security_service.record_event(
+                    attempt,
+                    "seb_verify_failed",
+                    severity="high",
+                    message=seb.get("detail"),
+                    verified=True,
+                )
+                raise LMSValidationError(
+                    "Safe Exam Browser session is no longer valid for this examination."
+                )
+            attempt.seb_verified = True
         credited = _touch_attempt(attempt)
         if _attempt_is_expired(attempt):
+            attempt.finalized_reason = "timeout"
             finalize_expired_attempt(attempt.id)
             attempt = get_attempt(attempt_id)
     info = get_attempt_timer_info(attempt_id)
@@ -189,6 +213,10 @@ def heartbeat(attempt_id: int) -> dict:
         "status": attempt.status,
         "credited_seconds": credited,
         "offline_credit_seconds": int(getattr(attempt, "offline_credit_seconds", 0) or 0),
+        "session_token": getattr(attempt, "session_token", None),
+        "security_mode": getattr(attempt, "security_mode", None),
+        "seb_verified": bool(getattr(attempt, "seb_verified", False)),
+        "server_now": datetime.utcnow().isoformat() + "Z",
     })
     return info
 
@@ -269,6 +297,9 @@ def start_attempt(
     assessment_id: int,
     assignment_id: Optional[int] = None,
     retake: bool = False,
+    *,
+    client_fingerprint: Optional[str] = None,
+    skip_security_gate: bool = False,
 ) -> tuple[AssessmentAttempt, bool, bool]:
     """Start or resume an attempt. Returns (attempt, resumed, already_completed).
 
@@ -280,7 +311,15 @@ def start_attempt(
     clear message on retake; diagnostic returns 200 with the existing
     attempt, so it needs its own explicit flag).
     """
+    from app.services.lms import exam_security_service
+
     assessment = get_assessment(assessment_id)
+    auth = {"seb": {"ok": False, "method": None}}
+    if not skip_security_gate:
+        # Learning Chat / Guided Practice never call this path; only quizzes/diagnostics.
+        auth = exam_security_service.authorize_start(
+            assessment, client_fingerprint=client_fingerprint
+        )
     # A diagnostic the admin removed / replaced stays startable for students of that
     # grade who still owe it (checked against the student's queue below).
     replaced_diagnostic = (
@@ -331,8 +370,26 @@ def start_attempt(
     db = get_db()
     existing = _find_in_progress_attempt(student_id, assessment_id, assignment_id)
     if existing:
+        policy = exam_security_service.policy_for(assessment)
+        if not policy.get("allow_resume", True):
+            raise LMSValidationError(
+                "This examination does not allow resuming an interrupted attempt. "
+                "Ask your teacher or invigilator for help."
+            )
         _abandon_stale_in_progress_attempts(
             student_id, assessment_id, existing.id, assignment_id
+        )
+        if _attempt_is_expired(existing) and policy.get("auto_submit_on_expiry", True):
+            finalize_expired_attempt(existing.id)
+            existing = get_attempt(existing.id)
+            if existing.status == "submitted":
+                return existing, False, True
+        seb_ok = bool((auth.get("seb") or {}).get("ok"))
+        exam_security_service.bind_attempt_security(
+            existing, assessment, seb_ok=seb_ok, client_fingerprint=client_fingerprint
+        )
+        exam_security_service.record_event(
+            existing, "resume", severity="info", message="Attempt resumed", verified=True
         )
         return existing, True, False
 
@@ -390,6 +447,19 @@ def start_attempt(
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
+    seb_ok = bool((auth.get("seb") or {}).get("ok"))
+    exam_security_service.bind_attempt_security(
+        attempt, assessment, seb_ok=seb_ok, client_fingerprint=client_fingerprint
+    )
+    if (auth.get("seb") or {}).get("ok"):
+        exam_security_service.record_event(
+            attempt,
+            "seb_verify_ok",
+            severity="info",
+            message=f"SEB verified via {(auth.get('seb') or {}).get('method')}",
+            verified=True,
+            context={"method": (auth.get("seb") or {}).get("method")},
+        )
 
     if is_diagnostic_retake:
         try:
@@ -851,6 +921,9 @@ def _score_and_finalize(attempt: AssessmentAttempt, assessment, *, timed_out: bo
     attempt.submitted_at = datetime.utcnow()
     if timed_out:
         attempt.timed_out = True
+        attempt.finalized_reason = attempt.finalized_reason or "timeout"
+    elif not attempt.finalized_reason:
+        attempt.finalized_reason = "submit"
     db.commit()
 
     _run_post_submit_steps(attempt, assessment)

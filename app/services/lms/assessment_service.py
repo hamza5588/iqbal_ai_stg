@@ -117,8 +117,9 @@ def update_quiz_settings(
     title: Optional[str] = None,
     time_limit_minutes: Optional[Union[str, int, float]] = None,
     update_time_limit: bool = False,
+    security_settings: Optional[dict] = None,
 ) -> Assessment:
-    """Update teacher quiz metadata (title / duration)."""
+    """Update teacher quiz metadata (title / duration / exam security)."""
     assessment = get_assessment(assessment_id)
     if assessment.assessment_type != "quiz":
         raise LMSValidationError("Only quizzes can be updated with this endpoint")
@@ -133,6 +134,13 @@ def update_quiz_settings(
         assessment.time_limit_minutes = parse_positive_whole_minutes(
             time_limit_minutes, required=True
         )
+    if security_settings:
+        from app.services.lms import exam_security_service
+
+        exam_security_service.update_security_settings(
+            assessment, security_settings, actor_id=teacher_id
+        )
+        return get_assessment(assessment_id)
     db = get_db()
     db.commit()
     db.refresh(assessment)
