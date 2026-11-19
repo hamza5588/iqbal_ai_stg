@@ -55,3 +55,12 @@ Fullscreen exit, tab hide, blur, reload are **suspected** events (`verified=fals
 ## Teacher configuration fields
 
 `security_mode`, `require_seb`, `allow_resume`, `max_interruptions`, `max_concurrent_sessions`, `exam_window_start/end`, `auto_submit_on_expiry`, `warn_on_focus_loss`, `seb_browser_exam_keys`, `rotate_seb_config_key`
+
+## Teacher UI
+
+On **Quizzes**, expand a quiz. The **Exam security** panel (Mode A / B / C) maps to `PATCH /api/lms/quizzes/:id`. Actions: Save security settings, Rotate SEB config key, Download SEB config. Soft-lock vs SEB/Supervised pills show on the quiz card. Asset cache-bust: `asset_v=20261120examsec2` in `templates/teacher/base.html`.
+
+## QA
+
+Full results, SEB unverified status, and deploy checklist: [`docs/exam_security_qa_report.md`](exam_security_qa_report.md).  
+Isolated E2E + video: `python scripts/exam_security_e2e_runner.py`.

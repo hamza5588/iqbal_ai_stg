@@ -664,6 +664,8 @@ def get_assessment_with_questions(assessment_id: int, include_answers: bool = Fa
             "error_message": src.error_message,
         }
 
+    from app.services.lms import exam_security_service
+
     return {
         "id": assessment.id,
         "title": assessment.title,
@@ -676,6 +678,7 @@ def get_assessment_with_questions(assessment_id: int, include_answers: bool = Fa
         "overall_confidence": assessment.overall_confidence,
         "requires_review": assessment.requires_review,
         "pdf_source": pdf_status,
+        "security": exam_security_service.serialize_policy(assessment),
         "questions": questions_out,
     }
 

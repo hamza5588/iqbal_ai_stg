@@ -1,0 +1,89 @@
+{
+  "started_at": "2026-11-19T20:16:08.391865Z",
+  "ids": {
+    "teacher_id": 2,
+    "student_id": 3,
+    "quiz_id": 1,
+    "question_id": 1
+  },
+  "base_url": "http://127.0.0.1:64704",
+  "seb": {
+    "installed": false,
+    "paths": [],
+    "os_lockdown_verified": false,
+    "note": "Safe Exam Browser binary not found on this Windows host. Real OS lockdown (Alt+Tab, exit, screenshots) is UNVERIFIED."
+  },
+  "api": [
+    {
+      "name": "teacher_patch_modes_a_b_c",
+      "pass": true
+    },
+    {
+      "name": "seb_config_download",
+      "pass": true
+    },
+    {
+      "name": "api_attack_seb_missing_headers",
+      "pass": true
+    },
+    {
+      "name": "server_auto_finalization",
+      "pass": true
+    },
+    {
+      "name": "api_attack_unauthenticated_events",
+      "pass": true
+    }
+  ],
+  "playwright": [
+    {
+      "name": "playwright_teacher_security_panel",
+      "pass": true
+    },
+    {
+      "name": "playwright_soft_lock_events",
+      "pass": true
+    },
+    {
+      "name": "playwright_network_failure_badge",
+      "pass": true
+    }
+  ],
+  "regression": [
+    {
+      "name": "import:app.services.lms.time_tracking_service",
+      "pass": true
+    },
+    {
+      "name": "import:app.services.student_reporting_service",
+      "pass": true
+    },
+    {
+      "name": "import:app.services.lms.attempt_service",
+      "pass": true
+    },
+    {
+      "name": "import:app.services.lms.assessment_service",
+      "pass": true
+    },
+    {
+      "name": "import:app.services.lms.exam_security_service",
+      "pass": true
+    },
+    {
+      "name": "time_tracking_module_ok",
+      "pass": true
+    }
+  ],
+  "videos": [
+    "C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\docs\\qa_evidence\\playwright_videos\\page@2235a5f3ab322fd4120dc3c14b7e2ace.webm",
+    "C:\\Users\\user\\Desktop\\iqbalai-v1.1\\iqbal_ai_stg\\docs\\qa_evidence\\playwright_videos\\page@dc9a01799e96b90f212d0762dc5197c0.webm"
+  ],
+  "finished_at": "2026-11-19T20:16:25.330152Z",
+  "summary": {
+    "total": 14,
+    "passed": 14,
+    "failed": 0,
+    "seb_os_lockdown_verified": false
+  }
+}

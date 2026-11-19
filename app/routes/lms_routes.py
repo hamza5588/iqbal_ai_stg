@@ -1589,6 +1589,8 @@ def quizzes():
         qs = assessment_service.list_assessments_by_teacher(
             _current_user_id(), assessment_type="quiz"
         )
+        from app.services.lms import exam_security_service
+
         return json_success(
             [
                 {
@@ -1597,6 +1599,9 @@ def quizzes():
                     "status": q.status,
                     "time_limit_minutes": q.time_limit_minutes,
                     "question_count": len(q.questions),
+                    "security": exam_security_service.serialize_policy(q),
+                    "security_mode": getattr(q, "security_mode", None) or "standard",
+                    "require_seb": bool(getattr(q, "require_seb", False)),
                 }
                 for q in qs
             ]

@@ -419,6 +419,8 @@ def update_security_settings(assessment: Assessment, body: dict, *, actor_id: in
         assessment.security_mode = mode
         if mode in ("seb", "supervised"):
             assessment.require_seb = True
+        elif mode == "standard" and "require_seb" not in body:
+            assessment.require_seb = False
     if "require_seb" in body:
         assessment.require_seb = bool(body["require_seb"])
         if assessment.require_seb and assessment.security_mode == "standard":
