@@ -22,6 +22,7 @@ from app.models.lms_models import (
 from app.routes.student_reporting_routes import bp
 from app.services.student_reporting_service import (
     ANSWER_HEADERS,
+    QUIZ_HEADERS,
     RESULT_HEADERS,
     TOPIC_HEADERS,
     assign_students,
@@ -177,10 +178,16 @@ def test_report_uses_latest_attempt_actual_answers_topics_and_usage(db):
     assert report["attempts"] == 1
     result = report["files"][0]["results"][0]
     assert result[7:12] == [1, 1, 0, 1.0, 15.0]
-    assert RESULT_HEADERS[-1] == "Quiz Minutes"
+    assert RESULT_HEADERS[-1] == "Quiz Time Taken (Minutes)"
+    assert QUIZ_HEADERS[20:27] == [
+        "Question No", "Domain", "Topic", "Question", "Student Selected", "Correct Answer", "Is Correct",
+    ]
     assert report["files"][0]["topics"][0][2:] == ["", "Algebra", 1, 1, 1.0]
     assert report["files"][0]["answers"][0][2:5] == ["Q1", "", "Algebra"]
     assert report["files"][0]["answers"][0][6:] == ["B", "B", "Yes"]
+    long_row = report["files"][0]["rows"][0]
+    assert long_row[0] == "Ayesha"
+    assert long_row[20:27] == ["Q1", "", "Algebra", long_row[23], "B", "B", "Yes"]
     assert report["learning_usage"]
     assert report["learning_usage"][0][:4] == [date(2026, 10, 29), 2, "Ayesha", "School A"]
     assert report["attempt_rule"].startswith("Selected assessment:")
@@ -296,60 +303,66 @@ def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
     assert "Student group" in primary and "Test date" in primary and "Assessment" in primary and "School" in primary
     assert "Cohort" not in primary and "Test type" not in primary and "FollowUp order" not in template
     assert 'id="sr-cohort" value="default"' in template
-    assert "admin-dashboard.js') }}?v=20261103reports4" in dashboard
+    assert "student-reporting.js') }}?v=20261119analyticsfmt" in dashboard
 
 
-def test_workbook_matches_reference_contract_and_export_merges_files(db):
+def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
     file_data = {
-        "group":"Controlled", "test_type":"Baseline", "test_date":date(2026,10,29),
-        "filename":"Controlled_Baseline_2026-10-29.xlsx", "assessment_id":1,
-        "results":[["=unsafe", "student@example.com", "School", "Controlled", "Baseline", date(2026,10,29), "Test", 1, 1, 0, 1.0, 5.0]],
-        "topics":[["Student", "student@example.com", "Algebra", "Algebraic Formulas/Identities", 1, 1, 1.0]],
-        "answers":[["Student", "student@example.com", "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes"]],
-        "learning_usage":[[date(2026,10,29), 2, "Student", "School", None, 0, "Not tracked"]],
+        "group": "Controlled",
+        "test_type": "Baseline",
+        "test_date": date(2026, 10, 29),
+        "sheet_name": "Diagnostic 29-Oct",
+        "filename": "Controlled_Baseline_2026-10-29.xlsx",
+        "assessment_id": 1,
+        "rows": [[
+            "=unsafe", "student@example.com", "School", "Controlled", "Baseline", date(2026, 10, 29),
+            "Test", 1, 1, 0, 1.0, 5.0, None, None, None, None, None, None, 2, None,
+            "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes",
+        ]],
+        "results": [["=unsafe", "student@example.com", "School", "Controlled", "Baseline", date(2026, 10, 29), "Test", 1, 1, 0, 1.0, 5.0]],
+        "topics": [["Student", "student@example.com", "Algebra", "Algebraic Formulas/Identities", 1, 1, 1.0]],
+        "answers": [["Student", "student@example.com", "Q1", "Algebra", "Algebraic Formulas/Identities", "2+2?", "B", "B", "Yes"]],
     }
     stream = workbook_for_file(file_data)
     workbook = load_workbook(stream, data_only=False)
-    reference = load_workbook(Path("app/report_templates/controlled.xlsx"))
-    expected_sheets = ["Results", "Learning Usage", "Topic Scores", "Answers", "Domain-Topic List", "Instructions"]
-
-    assert workbook.sheetnames == reference.sheetnames == expected_sheets
-    assert [cell.value for cell in workbook["Results"][1][:len(RESULT_HEADERS)]] == RESULT_HEADERS
-    assert [cell.value for cell in workbook["Topic Scores"][1][:len(TOPIC_HEADERS)]] == TOPIC_HEADERS
-    assert [cell.value for cell in workbook["Answers"][1][:len(ANSWER_HEADERS)]] == ANSWER_HEADERS
-    assert workbook["Instructions"]["A1"].value == reference["Instructions"]["A1"].value
-    assert workbook["Results"]["K2"].number_format == "0.00%"
-    assert workbook["Topic Scores"]["G2"].number_format == "0.00%"
-    assert workbook["Results"]["A2"].data_type == "s"  # formula injection is neutralized
-    assert workbook["Domain-Topic List"]["A1"].value == "Domain"
-    assert workbook["Domain-Topic List"].max_row == reference["Domain-Topic List"].max_row
-    assert workbook["Instructions"]["A2"].value == reference["Instructions"]["A2"].value
-    assert workbook["Learning Usage"].max_row == 2
+    assert workbook.sheetnames == ["Diagnostic 29-Oct"]
+    sheet = workbook["Diagnostic 29-Oct"]
+    assert [cell.value for cell in sheet[1][: len(QUIZ_HEADERS)]] == list(QUIZ_HEADERS)
+    assert sheet["K2"].number_format == "0.00%"
+    assert sheet["A2"].data_type == "s"  # formula injection is neutralized
+    assert sheet["U2"].value == "Q1"
+    assert sheet["Y2"].value == "B"
     second = {
         **file_data,
         "group": "Uncontrolled",
+        "sheet_name": "Diagnostic 29-Oct",
         "filename": "Uncontrolled_Baseline_2026-10-29.xlsx",
-        "results": [["Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026,10,29), "Test B", 1, 0, 1, 0.0, 4.0]],
+        "rows": [[
+            "Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026, 10, 29),
+            "Test B", 1, 0, 1, 0.0, 4.0, None, None, "0:00:00", None, 0.0, 0, 3, "2026-10-29: total 0 [quiz day, not counted]",
+            "Q1", "Numbers", "Laws of Exponents", "3+3?", "A", "B", "No",
+        ]],
+        "results": [["Second", "second@example.com", "School B", "Uncontrolled", "Baseline", date(2026, 10, 29), "Test B", 1, 0, 1, 0.0, 4.0]],
         "topics": [["Second", "second@example.com", "Numbers", "Laws of Exponents", 0, 1, 0.0]],
         "answers": [["Second", "second@example.com", "Q1", "Numbers", "Laws of Exponents", "3+3?", "A", "B", "No"]],
-        "learning_usage": [],
     }
     report = {
-        "files":[file_data, second],
-        "filters":{"start":"2026-10-29", "end":"2026-10-29"},
-        "learning_usage": file_data["learning_usage"],
+        "files": [file_data, second],
+        "filters": {"start": "2026-10-29", "end": "2026-10-29"},
+        "learning_usage": [],
     }
-    merged, name, mime = export_report(report)
-    assert name == "IqbalAI_Performance_Both_Groups_2026-10-29.xlsx"
-    assert mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    exported = load_workbook(merged, data_only=False)
-    assert exported.sheetnames == expected_sheets
-    assert exported["Results"].max_row == 3
-    assert exported["Topic Scores"].max_row == 3
-    assert exported["Answers"].max_row == 3
-    assert [exported["Results"][row][1].value for row in (2, 3)] == ["student@example.com", "second@example.com"]
-    assert exported["Instructions"]["A2"].value == reference["Instructions"]["A2"].value
-    assert exported["Domain-Topic List"].max_row == reference["Domain-Topic List"].max_row
+    bundled, name, mime = export_report(report)
+    assert name == "IqbalAI_Performance_Both_Groups_2026-10-29.zip"
+    assert mime == "application/zip"
+    import zipfile
+    with zipfile.ZipFile(bundled) as archive:
+        assert sorted(archive.namelist()) == [
+            "Controlled_Baseline_2026-10-29.xlsx",
+            "Uncontrolled_Baseline_2026-10-29.xlsx",
+        ]
+        controlled = load_workbook(io.BytesIO(archive.read("Controlled_Baseline_2026-10-29.xlsx")))
+        assert [cell.value for cell in controlled.active[1][: len(QUIZ_HEADERS)]] == list(QUIZ_HEADERS)
+        assert controlled.active["B2"].value == "student@example.com"
 
 
 def test_report_api_requires_login(monkeypatch):

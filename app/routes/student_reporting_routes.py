@@ -189,7 +189,8 @@ def report_preview():
             topic_rows=report["topic_rows"], warnings=report["warnings"],
             diagnostics=report["diagnostics"],
             attempt_rule=report["attempt_rule"], metric_rules=report["metric_rules"],
-            files=[{"filename": item["filename"], "rows": len(item["results"]),
+            files=[{"filename": item["filename"], "rows": len(item.get("results") or []),
+                    "question_rows": len(item.get("rows") or []),
                     "group": item["group"], "test_type": item["test_type"],
                     "test_date": item["test_date"].isoformat()} for item in report["files"]],
         )

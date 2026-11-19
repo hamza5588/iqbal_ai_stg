@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
-from openpyxl import load_workbook
+import zipfile
+
+from openpyxl import Workbook, load_workbook
 from sqlalchemy import and_, func, or_
 
 from app.models.database_models import SystemSettings, TutorDailyUsage, User
@@ -34,11 +36,39 @@ REPORT_ZONE = ZoneInfo("Asia/Karachi")
 GROUPS = ("Controlled", "Uncontrolled")
 TEST_TYPES = ("Baseline", "FollowUp")
 COHORT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_. -]{0,99}$")
-RESULT_HEADERS = [
-    "Student Name", "Email", "School", "Group", "Test Type", "Test Date",
-    "Test Name", "Total Questions", "Correct Answers", "Incorrect", "Percentage",
-    "Quiz Minutes",
+# One sheet · one row per student per question — matches login Analytics (IqbalAI_Dashboard_v23)
+# and the Controlled_/Uncontrolled_ Baseline|FollowUp sample workbooks.
+QUIZ_HEADERS = [
+    "Student Name",
+    "Email",
+    "School",
+    "Group",
+    "Test Type",
+    "Test Date",
+    "Test Name",
+    "Total Questions",
+    "Correct Answers",
+    "Incorrect",
+    "Percentage",
+    "Quiz Time Taken (Minutes)",
+    "Quiz Page Opens",
+    "Time Away from dil.iqbalai (Minutes)",
+    "Learning Chat Time (since previous quiz)",
+    "AI-Guided Practice Time (since previous quiz)",
+    "Total Time on dil.iqbalai (Active Minutes, since previous quiz)",
+    "Days Learned",
+    "dil.iqbalai Student ID",
+    "Daily Learning Detail",
+    "Question No",
+    "Domain",
+    "Topic",
+    "Question",
+    "Student Selected",
+    "Correct Answer",
+    "Is Correct",
 ]
+# Back-compat aliases used by older unit tests / imports.
+RESULT_HEADERS = QUIZ_HEADERS[:12]
 TOPIC_HEADERS = ["Student Name", "Email", "Domain", "Topic", "Correct", "Total", "Score %"]
 ANSWER_HEADERS = [
     "Student Name", "Email", "Question No", "Domain", "Topic", "Question",
@@ -47,7 +77,6 @@ ANSWER_HEADERS = [
 LEARNING_USAGE_HEADERS = [
     "Date", "Student ID", "Student Name", "School Name", "AI Tutor Time", "Active Minutes", "Coverage",
 ]
-DATA_SHEETS = ("Results", "Learning Usage", "Topic Scores", "Answers")
 
 
 def normalize_cohort(value) -> str:
@@ -497,8 +526,17 @@ def _tracking_start_day(db) -> date | None:
     return started.astimezone(REPORT_ZONE).date()
 
 
+def _ms_to_hms(ms: int | None) -> str | None:
+    if ms is None:
+        return None
+    total_sec = max(0, int(ms) // 1000)
+    hours, rem = divmod(total_sec, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+
 def _learning_usage_rows(db, students: list[User], start_day: date, end_day: date) -> list[list]:
-    """Daily AI Tutor usage rows matching the Learning Usage template sheet."""
+    """Legacy daily AI Tutor rows (still returned in preview diagnostics / older consumers)."""
     if not students:
         return []
     ids = [student.id for student in students]
@@ -531,6 +569,67 @@ def _learning_usage_rows(db, students: list[User], start_day: date, end_day: dat
             ])
         day += timedelta(days=1)
     return rows
+
+
+def _usage_map_for_students(db, student_ids: Iterable[int], start_day: date, end_day: date) -> dict[tuple[int, date], int]:
+    ids = list(student_ids)
+    if not ids:
+        return {}
+    return {
+        (row.user_id, row.usage_date): int(row.active_ms or 0)
+        for row in db.query(TutorDailyUsage).filter(
+            TutorDailyUsage.user_id.in_(ids),
+            TutorDailyUsage.usage_date >= start_day,
+            TutorDailyUsage.usage_date <= end_day,
+        ).all()
+    }
+
+
+def _learning_since_previous(
+    *,
+    student_id: int,
+    quiz_day: date,
+    previous_day: date | None,
+    usage_map: dict[tuple[int, date], int],
+    track_start: date | None,
+) -> tuple[str | None, str | None, float | None, int | None, str | None]:
+    """Aggregate dil.iqbalai usage between the previous quiz and this quiz day.
+
+    Chat vs AI-Guided Practice are not stored separately in TutorDailyUsage, so those
+    columns stay blank and totals / daily detail use active minutes only — matching the
+    Analytics columns that accept ``total X.X`` without chat/practice splits.
+    """
+    if track_start is None:
+        return None, None, None, None, None
+    window_start = previous_day + timedelta(days=1) if previous_day else track_start
+    if window_start < track_start:
+        window_start = track_start
+    if window_start > quiz_day:
+        return "0:00:00", None, 0.0, 0, None
+
+    detail_parts: list[str] = []
+    counted_ms = 0
+    days_learned = 0
+    day = window_start
+    while day <= quiz_day:
+        tracked = day >= track_start
+        if not tracked:
+            day += timedelta(days=1)
+            continue
+        ms = int(usage_map.get((student_id, day), 0))
+        minutes = round(ms / 60000, 2)
+        if day == quiz_day:
+            detail_parts.append(f"{day.isoformat()}: total {minutes} [quiz day, not counted]")
+        else:
+            if minutes > 0:
+                days_learned += 1
+                counted_ms += ms
+            suffix = " (partial day)" if day == track_start else ""
+            detail_parts.append(f"{day.isoformat()}: total {minutes}{suffix}" if minutes or day == track_start else f"{day.isoformat()}: 0")
+        day += timedelta(days=1)
+
+    total_minutes = round(counted_ms / 60000, 2)
+    return "0:00:00", None, total_minutes, days_learned, "; ".join(detail_parts) if detail_parts else None
 
 
 def build_report(db, filters) -> dict:
@@ -666,13 +765,28 @@ def build_report(db, filters) -> dict:
         )
     if other_group_count and not selected:
         warnings.add(f"{other_group_count} classified attempt(s) belonged to a different student group on the test date.")
-    files = defaultdict(lambda: {"results": [], "topics": [], "answers": [], "assessment_id": None})
+
+    # Previous quiz day per student (for "since previous quiz" learning columns).
+    prior_days: dict[int, list[date]] = defaultdict(list)
+    for attempt, _, student, _, _ in selected:
+        prior_days[student.id].append(_local_day(attempt.submitted_at))
+    for student_id, days in prior_days.items():
+        prior_days[student_id] = sorted(set(days))
+
+    usage_student_ids = {student.id for _, _, student, _, _ in selected}
+    usage_map = _usage_map_for_students(db, usage_student_ids, start_day - timedelta(days=60), end_day)
+    track_start = _tracking_start_day(db)
+
+    files = defaultdict(lambda: {
+        "rows": [], "results": [], "topics": [], "answers": [], "assessment_id": None, "title": "",
+    })
     scores = []
     for attempt, assessment, student, classification, group in selected:
         submitted_day = _local_day(attempt.submitted_at)
         file_key = (group, classification.test_type, submitted_day, assessment.id)
         bucket = files[file_key]
         bucket["assessment_id"] = assessment.id
+        bucket["title"] = assessment.title or ""
         answer_map = answers_by_attempt[attempt.id]
         graded = [answer for answer in answer_map.values() if answer.is_correct is not None]
         total = len(graded)
@@ -685,15 +799,50 @@ def build_report(db, filters) -> dict:
         if attempt.started_at and attempt.submitted_at and attempt.submitted_at >= attempt.started_at:
             minutes = round((attempt.submitted_at - attempt.started_at).total_seconds() / 60, 2)
         else:
-            warnings.add("Some attempts do not have a reliable duration; Quiz Minutes is blank.")
-        bucket["results"].append([
-            student.full_name or student.username, student.useremail, student.school_name or "", group,
-            classification.test_type, submitted_day, assessment.title, total, correct, incorrect,
-            percentage, minutes,
-        ])
+            warnings.add("Some attempts do not have a reliable duration; Quiz Time Taken is blank.")
+        time_away = None
+        if getattr(attempt, "offline_credit_seconds", None):
+            time_away = round(int(attempt.offline_credit_seconds or 0) / 60, 2)
+
+        earlier = [day for day in prior_days.get(student.id, []) if day < submitted_day]
+        previous_day = earlier[-1] if earlier else None
+        chat_hms, practice_hms, total_learn_min, days_learned, daily_detail = _learning_since_previous(
+            student_id=student.id,
+            quiz_day=submitted_day,
+            previous_day=previous_day,
+            usage_map=usage_map,
+            track_start=track_start,
+        )
+
+        shared = [
+            student.full_name or student.username,
+            student.useremail,
+            student.school_name or "",
+            group,
+            classification.test_type,
+            submitted_day,
+            assessment.title,
+            total,
+            correct,
+            incorrect,
+            percentage,
+            minutes,
+            None,  # Quiz Page Opens — not tracked per attempt yet
+            time_away,
+            chat_hms,
+            practice_hms,
+            total_learn_min,
+            days_learned,
+            student.id,
+            daily_detail,
+        ]
+        # Keep a one-row-per-student summary for preview counts / older tests.
+        bucket["results"].append(shared[:12])
         if percentage is not None:
             scores.append(percentage)
+
         topic_totals = defaultdict(lambda: [0, 0])
+        question_rows_written = 0
         for number, question_id in enumerate(ordered_question_ids[attempt.id], 1):
             pair = questions.get(question_id)
             if not pair:
@@ -707,13 +856,27 @@ def build_report(db, filters) -> dict:
             if answer and answer.is_correct is not None and topic_name:
                 topic_totals[(domain_name, topic_name)][1] += 1
                 topic_totals[(domain_name, topic_name)][0] += int(answer.is_correct is True)
+            selected_label = _option_value(question, answer.selected_option_index) if answer else ""
+            correct_label = (
+                _option_value(question, question.correct_option_index) or question.correct_answer_raw or ""
+            )
+            is_correct = (
+                "Yes" if answer and answer.is_correct is True
+                else "No" if answer and answer.is_correct is False
+                else ""
+            )
+            q_text = question.question_text or question.question_latex or ""
             bucket["answers"].append([
                 student.full_name or student.username, student.useremail, f"Q{number}", domain_name, topic_name,
-                question.question_text or question.question_latex or "",
-                _option_value(question, answer.selected_option_index) if answer else "",
-                _option_value(question, question.correct_option_index) or question.correct_answer_raw or "",
-                "Yes" if answer and answer.is_correct is True else "No" if answer and answer.is_correct is False else "",
+                q_text, selected_label, correct_label, is_correct,
             ])
+            bucket["rows"].append(shared + [
+                f"Q{number}", domain_name, topic_name, q_text, selected_label, correct_label, is_correct,
+            ])
+            question_rows_written += 1
+        if question_rows_written == 0:
+            # Still emit a student row so Analytics can see the attempt score.
+            bucket["rows"].append(shared + ["", "", "", "", "", "", ""])
         for (domain_name, topic_name), (topic_correct, topic_total) in sorted(topic_totals.items()):
             bucket["topics"].append([
                 student.full_name or student.username, student.useremail, domain_name, topic_name,
@@ -728,8 +891,14 @@ def build_report(db, filters) -> dict:
         same_day_sequence[sequence_key] += 1
         suffix = f"_{same_day_sequence[sequence_key]}" if same_day_sequence[sequence_key] > 1 else ""
         data = files[key]
-        data.update({"group": group, "test_type": test_type, "test_date": test_day,
-                     "filename": f"{group}_{test_type}_{test_day.isoformat()}{suffix}.xlsx"})
+        sheet_kind = "Diagnostic" if test_type == "Baseline" else "Quiz"
+        data.update({
+            "group": group,
+            "test_type": test_type,
+            "test_date": test_day,
+            "sheet_name": f"{sheet_kind} {test_day.strftime('%d-%b')}",
+            "filename": f"{group}_{test_type}_{test_day.isoformat()}{suffix}.xlsx",
+        })
         file_list.append(data)
     selected_students = []
     seen_student_ids = set()
@@ -762,8 +931,15 @@ def build_report(db, filters) -> dict:
         ),
         "metric_rules": {
             "quiz_minutes": "Minutes from attempt started_at to submitted_at for this quiz.",
-            "learning_usage": "Daily AI Tutor active minutes for matched students in the selected Pakistan-time window.",
+            "learning_usage": (
+                "Learning columns are total active minutes on dil.iqbalai since the student's previous quiz "
+                "(chat vs AI-Guided Practice are blank when not tracked separately)."
+            ),
             "domain_topic": "Prefer printed Domain/Topic from question taxonomy; otherwise use the linked LMS topic name.",
+            "export_format": (
+                "One quiz per workbook, one sheet, one row per student per question — "
+                "same columns as login Analytics / IqbalAI_Dashboard_v23 templates."
+            ),
         },
     }
 
@@ -775,48 +951,41 @@ def _safe_text_cells(ws):
                 cell.data_type = "s"
 
 
+def _sheet_title(file_data) -> str:
+    name = str(file_data.get("sheet_name") or "Quiz").strip() or "Quiz"
+    return name[:31]
+
+
 def workbook_for_file(file_data) -> io.BytesIO:
-    template_name = "controlled.xlsx" if file_data["group"] == "Controlled" else "uncontrolled.xlsx"
-    template_path = Path(__file__).resolve().parents[1] / "report_templates" / template_name
-    if not template_path.exists():
-        raise RuntimeError(f"Report template is missing: {template_name}")
-    workbook = load_workbook(template_path)
-    expected = {
-        "Results": RESULT_HEADERS,
-        "Learning Usage": LEARNING_USAGE_HEADERS,
-        "Topic Scores": TOPIC_HEADERS,
-        "Answers": ANSWER_HEADERS,
-    }
-    for sheet_name, headers in expected.items():
-        if sheet_name not in workbook.sheetnames:
-            raise RuntimeError(f"Packaged template is missing sheet: {sheet_name}")
-        ws = workbook[sheet_name]
-        actual = [cell.value for cell in ws[1][:len(headers)]]
-        if actual != headers:
-            raise RuntimeError(f"Packaged template has incompatible {sheet_name} columns.")
-        if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row - 1)
-    if "Domain-Topic List" not in workbook.sheetnames:
-        raise RuntimeError("Packaged template is missing sheet: Domain-Topic List")
-    for row in file_data["results"]:
-        workbook["Results"].append(row)
-    for row in file_data.get("learning_usage") or []:
-        workbook["Learning Usage"].append(row)
-    for row in file_data["topics"]:
-        workbook["Topic Scores"].append(row)
-    for row in file_data["answers"]:
-        workbook["Answers"].append(row)
-    # Leave Domain-Topic List and Instructions exactly as packaged in the template.
-    for row_number in range(2, workbook["Results"].max_row + 1):
-        workbook["Results"].cell(row_number, 6).number_format = "yyyy-mm-dd"
-        workbook["Results"].cell(row_number, 11).number_format = "0.00%"
-    for row_number in range(2, workbook["Topic Scores"].max_row + 1):
-        workbook["Topic Scores"].cell(row_number, 7).number_format = "0.00%"
-    for row_number in range(2, workbook["Learning Usage"].max_row + 1):
-        workbook["Learning Usage"].cell(row_number, 1).number_format = "yyyy-mm-dd"
-        workbook["Learning Usage"].cell(row_number, 5).number_format = "[h]:mm:ss"
-    for sheet_name in DATA_SHEETS:
-        _safe_text_cells(workbook[sheet_name])
+    """Build one Analytics-compatible quiz workbook (single sheet, long rows)."""
+    workbook = Workbook()
+    ws = workbook.active
+    ws.title = _sheet_title(file_data)
+    ws.append(list(QUIZ_HEADERS))
+    rows = file_data.get("rows")
+    if rows is None:
+        # Allow older callers that only supply results/answers to still export.
+        rows = []
+        by_email = {row[1]: row for row in (file_data.get("results") or [])}
+        for answer in file_data.get("answers") or []:
+            base = by_email.get(answer[1]) or [
+                answer[0], answer[1], "", file_data.get("group") or "",
+                file_data.get("test_type") or "", file_data.get("test_date"),
+                "", None, None, None, None, None,
+            ]
+            pad = list(base[:12]) + [None] * (20 - 12)
+            if len(pad) < 20:
+                pad.extend([None] * (20 - len(pad)))
+            rows.append(pad[:20] + list(answer[2:9]))
+    for row in rows:
+        values = list(row)
+        if len(values) < len(QUIZ_HEADERS):
+            values.extend([None] * (len(QUIZ_HEADERS) - len(values)))
+        ws.append(values[: len(QUIZ_HEADERS)])
+    for row_number in range(2, ws.max_row + 1):
+        ws.cell(row_number, 6).number_format = "yyyy-mm-dd"  # Test Date
+        ws.cell(row_number, 11).number_format = "0.00%"  # Percentage
+    _safe_text_cells(ws)
     output = io.BytesIO()
     workbook.save(output)
     output.seek(0)
@@ -827,17 +996,30 @@ def export_report(report) -> tuple[io.BytesIO, str, str]:
     files = report["files"]
     if not files:
         raise ValueError("No matching submitted attempts were found. Nothing was exported.")
-    groups = sorted({item["group"] for item in files})
-    merged = {
-        "group": groups[0] if len(groups) == 1 else "Controlled",
-        "results": [row for item in files for row in item["results"]],
-        "topics": [row for item in files for row in item["topics"]],
-        "answers": [row for item in files for row in item["answers"]],
-        "learning_usage": list(report.get("learning_usage") or []),
-    }
-    group_label = groups[0] if len(groups) == 1 else "Both_Groups"
+    if len(files) == 1:
+        item = files[0]
+        return (
+            workbook_for_file(item),
+            item["filename"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    # Analytics expects one file per quiz named Group_TestType_YYYY-MM-DD.xlsx
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        used_names: set[str] = set()
+        for item in files:
+            name = item["filename"]
+            if name in used_names:
+                stem = Path(name).stem
+                name = f"{stem}_{len(used_names) + 1}.xlsx"
+            used_names.add(name)
+            archive.writestr(name, workbook_for_file(item).getvalue())
+    buffer.seek(0)
     start = report["filters"]["start"]
     end = report["filters"]["end"]
     date_label = start if start == end else f"{start}_to_{end}"
-    filename = f"IqbalAI_Performance_{group_label}_{date_label}.xlsx"
-    return workbook_for_file(merged), filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    groups = sorted({item["group"] for item in files})
+    group_label = groups[0] if len(groups) == 1 else "Both_Groups"
+    filename = f"IqbalAI_Performance_{group_label}_{date_label}.zip"
+    return buffer, filename, "application/zip"
