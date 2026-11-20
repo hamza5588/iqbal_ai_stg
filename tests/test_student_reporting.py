@@ -277,7 +277,11 @@ def test_same_named_school_assessments_can_be_selected_as_one_quiz(db):
 
     assert report["attempts"] == 2
     assert report["matching_students"] == 2
-    assert len(report["files"]) == 2
+    # Same title + day + group + FollowUp → one Excel (not one file per teacher copy).
+    assert len(report["files"]) == 1
+    assert report["files"][0]["filename"] == "Uncontrolled_FollowUp_2026-10-29.xlsx"
+    assert sorted(report["files"][0]["assessment_ids"]) == sorted([first.id, second.id])
+    assert {row[1] for row in report["files"][0]["results"]} == {"one@example.com", "two@example.com"}
 
 
 def test_preview_diagnostics_explain_unclassified_and_historically_unassigned_attempts(db):
@@ -306,7 +310,7 @@ def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
     assert "Student group" in primary and "Test date" in primary and "Assessment" in primary and "School" in primary
     assert "Cohort" not in primary and "Test type" not in primary and "FollowUp order" not in template
     assert 'id="sr-cohort" value="default"' in template
-    assert "student-reporting.js') }}?v=20261119timetrack1" in dashboard
+    assert "student-reporting.js') }}?v=20261120mergequiz1" in dashboard
 
 
 def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):

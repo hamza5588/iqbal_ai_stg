@@ -194,7 +194,9 @@ def report_preview():
             files=[{"filename": item["filename"], "rows": len(item.get("results") or []),
                     "question_rows": len(item.get("rows") or []),
                     "group": item["group"], "test_type": item["test_type"],
-                    "test_date": item["test_date"].isoformat()} for item in report["files"]],
+                    "test_date": item["test_date"].isoformat(),
+                    "assessment_ids": list(item.get("assessment_ids") or ([item["assessment_id"]] if item.get("assessment_id") else [])),
+                    "title": item.get("title") or ""} for item in report["files"]],
             time_tracking={
                 "sources": timing.get("sources") or {},
                 "student_count": len(students_timing),

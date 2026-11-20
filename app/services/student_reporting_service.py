@@ -794,16 +794,23 @@ def build_report(db, filters) -> dict:
     time_tracking_students: dict[str, dict] = {}
 
     files = defaultdict(lambda: {
-        "rows": [], "results": [], "topics": [], "answers": [], "assessment_id": None, "title": "",
-        "time_tracking": [],
+        "rows": [], "results": [], "topics": [], "answers": [], "assessment_id": None,
+        "assessment_ids": [], "title": "", "time_tracking": [],
     })
     scores = []
     for attempt, assessment, student, classification, group in selected:
         submitted_day = _local_day(attempt.submitted_at)
-        file_key = (group, classification.test_type, submitted_day, assessment.id)
+        # One workbook per group + test type + day + quiz title.
+        # Same-titled copies from different teachers/classes merge into one Excel
+        # (e.g. four "Practice Quiz 4" FollowUp sections → one Uncontrolled_FollowUp_DATE.xlsx).
+        title_key = (assessment.title or "").strip() or f"assessment:{assessment.id}"
+        file_key = (group, classification.test_type, submitted_day, title_key)
         bucket = files[file_key]
-        bucket["assessment_id"] = assessment.id
-        bucket["title"] = assessment.title or ""
+        if bucket["assessment_id"] is None:
+            bucket["assessment_id"] = assessment.id
+        if assessment.id not in bucket["assessment_ids"]:
+            bucket["assessment_ids"].append(assessment.id)
+        bucket["title"] = assessment.title or bucket["title"] or ""
         answer_map = answers_by_attempt[attempt.id]
         graded = [answer for answer in answer_map.values() if answer.is_correct is not None]
         total = len(graded)
@@ -968,9 +975,10 @@ def build_report(db, filters) -> dict:
     file_list = []
     same_day_sequence = defaultdict(int)
     for key in sorted(files, key=lambda item: (item[2], item[0], item[1], item[3])):
-        group, test_type, test_day, _ = key
+        group, test_type, test_day, title_key = key
         sequence_key = (group, test_type, test_day)
         same_day_sequence[sequence_key] += 1
+        # Suffix only when different quiz titles share the same group/type/day.
         suffix = f"_{same_day_sequence[sequence_key]}" if same_day_sequence[sequence_key] > 1 else ""
         data = files[key]
         sheet_kind = "Diagnostic" if test_type == "Baseline" else "Quiz"
@@ -980,6 +988,7 @@ def build_report(db, filters) -> dict:
             "test_date": test_day,
             "sheet_name": f"{sheet_kind} {test_day.strftime('%d-%b')}",
             "filename": f"{group}_{test_type}_{test_day.isoformat()}{suffix}.xlsx",
+            "merge_key": title_key,
         })
         file_list.append(data)
     selected_students = []
@@ -1050,7 +1059,8 @@ def build_report(db, filters) -> dict:
             ),
             "domain_topic": "Prefer printed Domain/Topic from question taxonomy; otherwise use the linked LMS topic name.",
             "export_format": (
-                "One quiz per workbook, one sheet, one row per student per question — "
+                "One quiz title per workbook (same-day teacher/class copies merge), "
+                "one sheet, one row per student per question — "
                 "Analytics-compatible columns plus Question Time (Seconds)."
             ),
         },
