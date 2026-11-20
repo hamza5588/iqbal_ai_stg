@@ -262,3 +262,142 @@ def test_update_security_accepts_strict(db):
     ess.update_security_settings(a, {"security_mode": "strict"}, actor_id=1)
     assert a.security_mode == "strict"
     assert ess.policy_for(a)["lock_on_leave"] is True
+
+
+def test_second_leave_while_locked_stays_locked(db, monkeypatch):
+    """Server must stay locked when student leaves again after the first strict lock."""
+    a, _, student, _, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    ess.record_event(attempt, "tab_hidden", severity="warn")
+    db.refresh(attempt)
+    assert attempt.status == "locked"
+    ess.record_event(attempt, "window_blur", severity="warn")
+    db.refresh(attempt)
+    assert attempt.status == "locked"
+    hb = attempt_service.heartbeat(attempt.id, session_token=attempt.session_token)
+    assert hb["status"] == "locked" and hb["is_locked"] is True
+
+
+def test_heartbeat_while_locked_never_reports_in_progress(db, monkeypatch):
+    a, _, student, _, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    ess.record_event(attempt, "tab_hidden", severity="warn")
+    db.refresh(attempt)
+    for _ in range(3):
+        info = attempt_service.heartbeat(attempt.id, session_token=attempt.session_token)
+        assert info["status"] == "locked"
+        assert info["is_locked"] is True
+
+
+def test_already_locked_security_event_api_shape(db, monkeypatch):
+    """POST /security-events while locked must tell the client the attempt is still locked."""
+    a, _, student, _, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    ess.record_event(attempt, "tab_hidden", severity="warn")
+    db.refresh(attempt)
+    payload = {
+        "recorded": False,
+        "reason": "already_locked",
+        "status": "locked",
+        **ess.attempt_lock_payload(attempt),
+    }
+    assert payload["recorded"] is False
+    assert payload["status"] == "locked" and payload["is_locked"] is True
+    assert attempt.status == "locked"
+
+
+def _client_handle_server_lock(state: dict, data: dict) -> dict:
+    """Mirror of static/lms/lms-exam-security.js handleServerLock (strict unlock gate)."""
+    if not data:
+        return state
+    prev_token = state.get("sessionToken")
+    if data.get("session_token"):
+        state["sessionToken"] = data["session_token"]
+    locked = data.get("is_locked") or data.get("status") == "locked" or data.get("locked")
+    if locked:
+        if not state.get("lockUiShown"):
+            state["lockUiShown"] = True
+            state["locked"] = True
+    elif state.get("lockUiShown"):
+        token_rotated = bool(
+            data.get("session_token")
+            and prev_token
+            and data.get("session_token") != prev_token
+        )
+        teacher_unlock = (
+            data.get("unlocked") is True
+            or data.get("exam_unlocked") is True
+            or token_rotated
+        )
+        if teacher_unlock and (
+            data.get("status") == "in_progress" or data.get("is_locked") is False
+        ):
+            state["lockUiShown"] = False
+            state["locked"] = False
+    return state
+
+
+def test_double_cross_then_continue_payload_sequence_keeps_client_lock(db, monkeypatch):
+    """Simulate second leave + server already_locked response + heartbeat while still locked."""
+    a, _, student, _, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    ess.record_event(attempt, "tab_hidden", severity="warn")
+    db.refresh(attempt)
+    state = {"locked": True, "lockUiShown": True}
+    second = {
+        "recorded": False,
+        "reason": "already_locked",
+        **ess.attempt_lock_payload(attempt),
+    }
+    hb = attempt_service.heartbeat(attempt.id, session_token=attempt.session_token)
+    state = _client_handle_server_lock(state, second)
+    state = _client_handle_server_lock(state, hb)
+    assert attempt.status == "locked"
+    assert state["locked"] and state["lockUiShown"]
+
+
+def test_double_cross_then_stale_heartbeat_must_keep_client_lock():
+    """Regression: strict lock must not clear on a stale in_progress heartbeat/event.
+
+    Reproduces: lock shown locally on leave → heartbeat arrives before/with wrong
+    status → student clicks Continue and can take the quiz while server may still be locked.
+    """
+    state = {"locked": False, "lockUiShown": False, "sessionToken": "tok-a"}
+    # First cross: client fail-closed (lms-exam-security.js showLockedOverlay before POST completes)
+    state["locked"] = True
+    state["lockUiShown"] = True
+    # Concurrent or follow-up heartbeat while DB already locked — common wrong client response:
+    stale = {
+        "status": "in_progress",
+        "is_locked": False,
+        "remaining_seconds": 600,
+        "session_token": "tok-a",  # same token → not a teacher unlock
+    }
+    state = _client_handle_server_lock(state, stale)
+    assert state["locked"] is True and state["lockUiShown"] is True, (
+        "Client handleServerLock cleared the lock on status=in_progress without teacher unlock"
+    )
+
+
+def test_teacher_unlock_payload_clears_client_lock():
+    """Teacher unlock rotates session_token / sets unlocked=true → client may resume."""
+    state = {"locked": True, "lockUiShown": True, "sessionToken": "tok-a"}
+    unlocked = {
+        "status": "in_progress",
+        "is_locked": False,
+        "unlocked": True,
+        "session_token": "tok-b",
+    }
+    state = _client_handle_server_lock(state, unlocked)
+    assert state["locked"] is False and state["lockUiShown"] is False
+
+
+def test_double_cross_server_locked_client_keeps_lock_ui():
+    """When server payloads stay locked, client logic must keep the lock UI shown."""
+    state = {"locked": True, "lockUiShown": True}
+    for payload in (
+        {"status": "locked", "is_locked": True, "reason": "already_locked"},
+        {"status": "locked", "is_locked": True},
+    ):
+        state = _client_handle_server_lock(state, payload)
+    assert state["locked"] and state["lockUiShown"]

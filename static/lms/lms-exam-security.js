@@ -102,13 +102,20 @@
 
   function handleServerLock(data) {
     if (!data) return;
+    var prevToken = state.sessionToken;
     if (data.session_token) state.sessionToken = data.session_token;
     var locked = data.is_locked || data.status === 'locked' || data.locked;
     if (locked) {
       if (!state.lockUiShown) showLockedOverlay(data.lock_reason || 'exam window left');
-    } else if (state.lockUiShown && data.status === 'in_progress') {
-      hideLockedOverlay();
-      if (isStrict()) requestFullscreen();
+    } else if (state.lockUiShown) {
+      // Strict: never clear on a plain in_progress heartbeat (stale race / Continue).
+      // Only a real teacher unlock clears the UI — unlock rotates session_token and/or sets unlocked=true.
+      var tokenRotated = !!(data.session_token && prevToken && data.session_token !== prevToken);
+      var teacherUnlock = data.unlocked === true || data.exam_unlocked === true || tokenRotated;
+      if (teacherUnlock && (data.status === 'in_progress' || data.is_locked === false)) {
+        hideLockedOverlay();
+        if (isStrict()) requestFullscreen();
+      }
     }
     if (typeof window.lmsExamSecurityOnHeartbeat === 'function') {
       window.lmsExamSecurityOnHeartbeat(data);
@@ -325,4 +332,6 @@
   window.lmsExamSecurityIsLocked = function () {
     return !!state.locked;
   };
+  /** Test/debug hook: apply a server lock payload the same way heartbeats do. */
+  window.lmsExamSecurityApplyServerLockState = handleServerLock;
 })();
