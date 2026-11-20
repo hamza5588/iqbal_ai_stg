@@ -178,9 +178,9 @@ def main() -> int:
             security = data.get("security") or {}
             assert security.get("security_mode") == "strict" or security.get("is_strict")
 
-            # Load a page that has exam-security JS (student base)
-            page.goto(f"{base}/student/dashboard", wait_until="domcontentloaded")
-            page.wait_for_function("typeof window.lmsExamSecurityStart === 'function'")
+            # Stay on / reload student dashboard (student base loads exam-security JS)
+            page.goto(f"{base}/student-dashboard", wait_until="domcontentloaded")
+            page.wait_for_function("typeof window.lmsExamSecurityStart === 'function'", timeout=60000)
 
             page.evaluate(
                 """({ attemptId, token, security }) => {
