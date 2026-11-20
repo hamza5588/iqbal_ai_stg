@@ -1,9 +1,9 @@
-/* Mode A soft exam lockdown helpers (not OS lockdown).
+/* In-app soft exam lockdown helpers (IqbalAI only — not OS lockdown).
    - Fullscreen request + exit detection
    - Tab/focus visibility logging to /attempts/:id/security-events
    - Heartbeat to /attempts/:id/heartbeat
    - beforeunload warning
-   Safe Exam Browser (Mode B) is enforced server-side; this file only guides UX.
+   No third-party exam browser client.
 */
 (function () {
   var state = {
@@ -150,12 +150,6 @@
     if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
     state.heartbeatTimer = setInterval(heartbeat, 15000);
     heartbeat();
-    if (state.security && state.security.require_seb) {
-      // Soft UX note only — real enforcement is server-side SEB header checks.
-      if (typeof lmsShowToast === 'function') {
-        lmsShowToast('This exam requires Safe Exam Browser. If you are not in SEB, the server will reject your session.', 'error');
-      }
-    }
   };
 
   window.lmsExamSecurityStop = function () {

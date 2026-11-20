@@ -1,14 +1,12 @@
-"""Exam lockdown / SEB authorization helpers (defense-in-depth).
+"""In-app exam security helpers (IqbalAI only — no third-party SEB client).
 
 Modes
 -----
-- ``standard`` (Mode A): soft browser controls + server logging. Not OS lockdown.
-- ``seb`` (Mode B): requires Safe Exam Browser Config Key / Browser Exam Key
-  verification per https://www.safeexambrowser.org/developer/seb-config-key.html
-- ``supervised`` (Mode C): SEB required + institutional window / invigilator policy.
+- ``standard``: soft browser controls + server logging/heartbeat/events.
+- ``supervised``: same soft lock + optional exam window / stricter teacher knobs.
+- Legacy ``seb`` values in the DB are treated as ``standard`` (SEB removed).
 
-Residual risks (documented, not solved here): header spoofing without a signed
-client; second devices; phone photos; compromised endpoints; SEB binary forks.
+Residual risks: soft lock is not OS lockdown; second devices / phone photos remain.
 """
 
 from __future__ import annotations
@@ -32,7 +30,9 @@ from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
 
-SECURITY_MODES = ("standard", "seb", "supervised")
+SECURITY_MODES = ("standard", "supervised")
+# Legacy DB values accepted then normalized away from third-party SEB.
+_LEGACY_SEB_MODES = frozenset({"seb"})
 EVENT_TYPES = frozenset(
     {
         "fullscreen_exit",
@@ -83,9 +83,12 @@ def _seb_bypass_allowed() -> bool:
 
 def policy_for(assessment: Assessment) -> dict[str, Any]:
     mode = (getattr(assessment, "security_mode", None) or "standard").strip().lower()
+    if mode in _LEGACY_SEB_MODES:
+        mode = "standard"
     if mode not in SECURITY_MODES:
         mode = "standard"
-    require_seb = bool(getattr(assessment, "require_seb", False)) or mode in ("seb", "supervised")
+    # CEO policy: no third-party Safe Exam Browser — in-app soft lock only.
+    require_seb = False
     extra = {}
     raw = getattr(assessment, "security_policy_json", None)
     if raw:
@@ -122,8 +125,8 @@ def serialize_policy(assessment: Assessment) -> dict[str, Any]:
         "exam_window_end": p["exam_window_end"].isoformat() if p["exam_window_end"] else None,
         "auto_submit_on_expiry": p["auto_submit_on_expiry"],
         "warn_on_focus_loss": p["warn_on_focus_loss"],
-        "seb_configured": bool(p["seb_config_key_hash"]),
-        # Never expose quit passwords or raw BEK secrets to students.
+        "seb_configured": False,
+        "third_party_seb": False,
     }
 
 
@@ -251,9 +254,6 @@ def require_active_session(
     """Reject cross-session / finalized writes."""
     if attempt.status != "in_progress":
         raise LMSValidationError("This examination attempt is no longer active.")
-    policy = policy_for(assessment)
-    if policy["require_seb"] and not attempt.seb_verified and not _seb_bypass_allowed():
-        raise LMSValidationError("Safe Exam Browser verification is required for this examination.")
     if session_token and attempt.session_token and not hmac.compare_digest(
         str(attempt.session_token), str(session_token)
     ):
@@ -278,19 +278,8 @@ def authorize_start(
 
     policy = policy_for(assessment)
     assert_exam_window(assessment)
-
-    seb = {"ok": True, "method": None, "detail": "not_required"}
-    if policy["require_seb"]:
-        if not getattr(assessment, "seb_config_key_hash", None):
-            ensure_seb_config_key(assessment)
-        seb = verify_seb_headers(assessment)
-        if not seb["ok"]:
-            raise LMSValidationError(
-                "This examination requires Safe Exam Browser. "
-                "Download the SEB config from the exam page and open it in SEB, "
-                "or ask your teacher for setup help. "
-                f"(reason: {seb.get('detail')})"
-            )
+    # Third-party SEB is disabled; always allow in-app soft lock clients.
+    seb = {"ok": True, "method": None, "detail": "seb_disabled_in_app_only"}
     return {"ok": True, "policy": policy, "seb": seb, "client_fingerprint": client_fingerprint}
 
 
@@ -414,17 +403,18 @@ def update_security_settings(assessment: Assessment, body: dict, *, actor_id: in
     """Teacher/admin update of security knobs (server-enforced)."""
     if "security_mode" in body and body["security_mode"] is not None:
         mode = str(body["security_mode"]).strip().lower()
+        if mode in _LEGACY_SEB_MODES:
+            mode = "standard"
         if mode not in SECURITY_MODES:
-            raise LMSValidationError("security_mode must be standard, seb, or supervised")
+            raise LMSValidationError("security_mode must be standard or supervised (in-app only; SEB removed)")
         assessment.security_mode = mode
-        if mode in ("seb", "supervised"):
-            assessment.require_seb = True
-        elif mode == "standard" and "require_seb" not in body:
-            assessment.require_seb = False
-    if "require_seb" in body:
-        assessment.require_seb = bool(body["require_seb"])
-        if assessment.require_seb and assessment.security_mode == "standard":
-            assessment.security_mode = "seb"
+    # Always clear third-party SEB requirement.
+    assessment.require_seb = False
+    if "require_seb" in body and bool(body["require_seb"]):
+        logger.info(
+            "Ignoring require_seb=true for assessment %s — third-party SEB is disabled",
+            assessment.id,
+        )
     if "allow_resume" in body:
         assessment.allow_resume = bool(body["allow_resume"])
     if "max_interruptions" in body:
@@ -440,25 +430,13 @@ def update_security_settings(assessment: Assessment, body: dict, *, actor_id: in
         assessment.exam_window_start = _parse_dt(body["exam_window_start"])
     if "exam_window_end" in body:
         assessment.exam_window_end = _parse_dt(body["exam_window_end"])
-    if "seb_browser_exam_keys" in body:
-        keys = body["seb_browser_exam_keys"]
-        if keys is None:
-            assessment.seb_browser_exam_keys_json = None
-        elif isinstance(keys, str):
-            parts = [p.strip() for p in keys.replace(",", "\n").splitlines() if p.strip()]
-            assessment.seb_browser_exam_keys_json = json.dumps(parts)
-        elif isinstance(keys, list):
-            assessment.seb_browser_exam_keys_json = json.dumps([str(x).strip() for x in keys if str(x).strip()])
-        else:
-            raise LMSValidationError("seb_browser_exam_keys must be a list or multiline string")
-    if body.get("rotate_seb_config_key"):
+    # Drop any stored third-party SEB material on settings save.
+    assessment.seb_browser_exam_keys_json = None
+    if body.get("rotate_seb_config_key") or "seb_browser_exam_keys" in body:
         assessment.seb_config_key_hash = None
-        ensure_seb_config_key(assessment)
-    elif assessment.require_seb:
-        ensure_seb_config_key(assessment)
 
     logger.info(
-        "Assessment %s security updated by user %s → mode=%s require_seb=%s",
+        "Assessment %s security updated by user %s → mode=%s require_seb=%s (in-app only)",
         assessment.id,
         actor_id,
         assessment.security_mode,

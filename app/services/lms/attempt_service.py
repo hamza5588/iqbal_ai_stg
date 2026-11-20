@@ -187,22 +187,6 @@ def heartbeat(attempt_id: int, *, session_token: Optional[str] = None) -> dict:
             exam_security_service.require_active_session(
                 attempt, assessment, session_token=session_token
             )
-        # Re-check SEB on heartbeats for Mode B/C (headers present on each request).
-        policy = exam_security_service.policy_for(assessment)
-        if policy.get("require_seb") and not exam_security_service._seb_bypass_allowed():
-            seb = exam_security_service.verify_seb_headers(assessment)
-            if not seb.get("ok"):
-                exam_security_service.record_event(
-                    attempt,
-                    "seb_verify_failed",
-                    severity="high",
-                    message=seb.get("detail"),
-                    verified=True,
-                )
-                raise LMSValidationError(
-                    "Safe Exam Browser session is no longer valid for this examination."
-                )
-            attempt.seb_verified = True
         credited = _touch_attempt(attempt)
         if _attempt_is_expired(attempt):
             attempt.finalized_reason = "timeout"
@@ -384,9 +368,8 @@ def start_attempt(
             existing = get_attempt(existing.id)
             if existing.status == "submitted":
                 return existing, False, True
-        seb_ok = bool((auth.get("seb") or {}).get("ok"))
         exam_security_service.bind_attempt_security(
-            existing, assessment, seb_ok=seb_ok, client_fingerprint=client_fingerprint
+            existing, assessment, seb_ok=False, client_fingerprint=client_fingerprint
         )
         exam_security_service.record_event(
             existing, "resume", severity="info", message="Attempt resumed", verified=True
@@ -447,19 +430,9 @@ def start_attempt(
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
-    seb_ok = bool((auth.get("seb") or {}).get("ok"))
     exam_security_service.bind_attempt_security(
-        attempt, assessment, seb_ok=seb_ok, client_fingerprint=client_fingerprint
+        attempt, assessment, seb_ok=False, client_fingerprint=client_fingerprint
     )
-    if (auth.get("seb") or {}).get("ok"):
-        exam_security_service.record_event(
-            attempt,
-            "seb_verify_ok",
-            severity="info",
-            message=f"SEB verified via {(auth.get('seb') or {}).get('method')}",
-            verified=True,
-            context={"method": (auth.get("seb") or {}).get("method")},
-        )
 
     if is_diagnostic_retake:
         try:

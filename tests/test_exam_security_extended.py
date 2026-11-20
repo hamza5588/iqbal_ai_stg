@@ -63,15 +63,13 @@ def _seed(db, **kwargs):
     return a, q, student
 
 
-def test_update_security_mode_a_b_c(db):
+def test_update_security_in_app_modes_only(db):
     a, _, _ = _seed(db)
-    ess.update_security_settings(a, {"security_mode": "seb"}, actor_id=1)
-    assert a.security_mode == "seb" and a.require_seb is True and a.seb_config_key_hash
-    key1 = a.seb_config_key_hash
+    # Legacy "seb" request is normalized to standard; require_seb always cleared.
+    ess.update_security_settings(a, {"security_mode": "seb", "require_seb": True}, actor_id=1)
+    assert a.security_mode == "standard" and a.require_seb is False
     ess.update_security_settings(a, {"security_mode": "supervised", "max_interruptions": 3}, actor_id=1)
-    assert a.security_mode == "supervised" and a.max_interruptions == 3
-    ess.update_security_settings(a, {"rotate_seb_config_key": True}, actor_id=1)
-    assert a.seb_config_key_hash and a.seb_config_key_hash != key1
+    assert a.security_mode == "supervised" and a.max_interruptions == 3 and a.require_seb is False
     ess.update_security_settings(a, {"security_mode": "standard"}, actor_id=1)
     assert a.security_mode == "standard" and a.require_seb is False
 

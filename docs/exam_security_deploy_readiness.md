@@ -1,19 +1,30 @@
-# Exam security — production deploy readiness
-
-**Status:** Ready to deploy **after explicit approval**. No production deploy was run.
+# Exam security — deploy readiness (in-app only)
 
 ## Pre-deploy
 
-1. Confirm migration `app/migrations/exam_security.py` will run (or already applied).
-2. Ship backend + `static/teacher/js/teacher-quizzes.js`, `teacher-dashboard.css`, `lms/lms-exam-security.js`, templates with `asset_v=20261120examsec2`.
-3. Celery worker + **beat** for `finalize_expired_exam_attempts_task`.
-4. Env: `EXAM_SECURITY_SEB_BYPASS` unset / not `1`.
-5. Post-deploy smoke: teacher security panel save; optional SEB config download.
+1. Run migrations if security columns are not yet present (`exam_security` migration).
+2. Deploy app build with SEB removed (`asset_v=20261121noseb1` or later).
+3. Clear legacy flags (optional but recommended):
 
-## Explicit approval gate
+```sql
+UPDATE assessments
+SET require_seb = 0,
+    security_mode = CASE WHEN security_mode = 'seb' THEN 'standard' ELSE security_mode END,
+    seb_browser_exam_keys_json = NULL,
+    seb_config_key_hash = NULL
+WHERE require_seb = 1 OR security_mode = 'seb'
+   OR seb_browser_exam_keys_json IS NOT NULL
+   OR seb_config_key_hash IS NOT NULL;
+```
 
-Do **not** run production deploy, restart, or migration-on-prod until the owner replies with clear approval (e.g. “approve deploy exam security”).
+4. Confirm `EXAM_SECURITY_SEB_BYPASS` is unset in production (legacy; unused for gates).
 
-## Rollback sketch
+## Post-deploy smoke
 
-Revert app release to pre-exam-security build. Security columns are additive — leaving columns in place is safe; set quizzes back to `security_mode=standard` / `require_seb=false` if needed.
+1. Teacher: Quizzes → Exam security → Soft lock / Supervised save.
+2. Student: start quiz in normal Chrome — no SEB prompt; soft lock + timer work.
+3. `GET /api/lms/quizzes/<id>/seb-config` returns **410**.
+
+## Rollback
+
+Revert app release. Columns are additive. Set quizzes to `security_mode=standard` / `require_seb=false` if needed.

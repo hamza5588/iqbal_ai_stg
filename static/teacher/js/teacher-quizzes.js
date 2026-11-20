@@ -115,40 +115,36 @@
   function securityPill(z) {
     var sec = z.security || {};
     var mode = sec.security_mode || z.security_mode || 'standard';
-    if (sec.require_seb || mode === 'seb' || mode === 'supervised') {
-      return '<span class="td-pill" title="Safe Exam Browser required"><i class="fas fa-shield-halved"></i> ' +
-        (mode === 'supervised' ? 'Supervised SEB' : 'SEB') + '</span>';
+    if (mode === 'supervised') {
+      return '<span class="td-pill" title="In-app supervised soft lock"><i class="fas fa-shield-halved"></i> Supervised</span>';
     }
-    return '<span class="td-pill" title="Standard soft lockdown"><i class="fas fa-lock"></i> Soft lock</span>';
+    return '<span class="td-pill" title="In-app soft lockdown (normal browser)"><i class="fas fa-lock"></i> Soft lock</span>';
   }
 
   function securityPanelHtml(z) {
     var sec = z.security || {};
     var mode = sec.security_mode || z.security_mode || 'standard';
-    var requireSeb = !!(sec.require_seb || z.require_seb);
+    if (mode === 'seb') mode = 'standard';
     var allowResume = sec.allow_resume !== false;
     var warnFocus = sec.warn_on_focus_loss !== false;
     var autoSubmit = sec.auto_submit_on_expiry !== false;
     var maxInt = sec.max_interruptions == null ? '' : String(sec.max_interruptions);
     var winStart = sec.exam_window_start ? String(sec.exam_window_start).slice(0, 16) : '';
     var winEnd = sec.exam_window_end ? String(sec.exam_window_end).slice(0, 16) : '';
-    // datetime-local wants YYYY-MM-DDTHH:MM
     if (winStart.indexOf('T') === -1 && winStart.length >= 16) winStart = winStart.replace(' ', 'T');
     if (winEnd.indexOf('T') === -1 && winEnd.length >= 16) winEnd = winEnd.replace(' ', 'T');
     return '<div class="td-exam-security" id="tdExamSecurity-' + z.id + '" data-quiz-id="' + z.id + '">' +
-      '<h4 class="td-exam-security-title"><i class="fas fa-shield-halved"></i> Exam security</h4>' +
-      '<p class="td-help" style="margin:0 0 12px;">Soft lock works in a normal browser (logging only). SEB / Supervised require Safe Exam Browser and are enforced on the server. Soft signals never auto-fail a student by themselves.</p>' +
+      '<h4 class="td-exam-security-title"><i class="fas fa-shield-halved"></i> Exam security (IqbalAI only)</h4>' +
+      '<p class="td-help" style="margin:0 0 12px;">No third-party browser install. Soft lock runs inside IqbalAI (fullscreen, tab/focus warnings, heartbeat, server timer). Soft signals are logged for review — they do not auto-fail a student.</p>' +
       '<div class="td-exam-security-grid">' +
         '<div class="td-field">' +
           '<label for="tdSecMode-' + z.id + '">Security mode</label>' +
-          '<select id="tdSecMode-' + z.id + '" onchange="tdQuizzes.onSecurityModeChange(' + z.id + ')">' +
-            '<option value="standard"' + (mode === 'standard' ? ' selected' : '') + '>Mode A — Soft lock (standard browser)</option>' +
-            '<option value="seb"' + (mode === 'seb' ? ' selected' : '') + '>Mode B — Safe Exam Browser (SEB)</option>' +
-            '<option value="supervised"' + (mode === 'supervised' ? ' selected' : '') + '>Mode C — Supervised high-security</option>' +
+          '<select id="tdSecMode-' + z.id + '">' +
+            '<option value="standard"' + (mode === 'standard' ? ' selected' : '') + '>Soft lock — normal browser</option>' +
+            '<option value="supervised"' + (mode === 'supervised' ? ' selected' : '') + '>Supervised — soft lock + exam window</option>' +
           '</select>' +
         '</div>' +
         '<div class="td-field td-check-stack">' +
-          '<label class="td-check-inline"><input type="checkbox" id="tdSecRequireSeb-' + z.id + '"' + (requireSeb ? ' checked' : '') + '> Require Safe Exam Browser</label>' +
           '<label class="td-check-inline"><input type="checkbox" id="tdSecAllowResume-' + z.id + '"' + (allowResume ? ' checked' : '') + '> Allow resume after interruption</label>' +
           '<label class="td-check-inline"><input type="checkbox" id="tdSecWarnFocus-' + z.id + '"' + (warnFocus ? ' checked' : '') + '> Warn / log focus &amp; tab switches</label>' +
           '<label class="td-check-inline"><input type="checkbox" id="tdSecAutoSubmit-' + z.id + '"' + (autoSubmit ? ' checked' : '') + '> Auto-submit when time expires (server)</label>' +
@@ -166,18 +162,11 @@
           '<label for="tdSecWinEnd-' + z.id + '">Exam window end (UTC, optional)</label>' +
           '<input id="tdSecWinEnd-' + z.id + '" type="datetime-local" value="' + U.esc(winEnd) + '">' +
         '</div>' +
-        '<div class="td-field td-exam-security-bek">' +
-          '<label for="tdSecBek-' + z.id + '">Browser Exam Keys (optional, one per line)</label>' +
-          '<textarea id="tdSecBek-' + z.id + '" rows="3" placeholder="Paste SEB Browser Exam Key hashes from the official SEB Config Tool"></textarea>' +
-          '<p class="td-help">Use for Mode B/C binary integrity. Leave blank to rely on the server Config Key.</p>' +
-        '</div>' +
       '</div>' +
       '<div class="td-exam-security-actions">' +
         '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.saveSecurity(' + z.id + ')"><i class="fas fa-save"></i> Save security settings</button>' +
-        '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.rotateSebKey(' + z.id + ')" title="Invalidate old SEB configs"><i class="fas fa-sync"></i> Rotate SEB config key</button>' +
-        '<a class="td-btn td-btn-outline-blue td-btn-sm" href="/api/lms/quizzes/' + z.id + '/seb-config" target="_blank" rel="noopener"><i class="fas fa-download"></i> Download SEB config</a>' +
       '</div>' +
-      '<p class="td-help td-exam-security-note"><b>Residual risk:</b> SEB headers can still be forged by a custom client that knows the key. High-stakes exams should use Mode C with invigilators / managed devices. Soft lock is not OS lockdown.</p>' +
+      '<p class="td-help td-exam-security-note"><b>Note:</b> Soft lock is not OS-level lockdown. For high-stakes exams, use invigilators / school lab supervision.</p>' +
     '</div>';
   }
 
@@ -251,26 +240,20 @@
     }
   }
 
-  function onSecurityModeChange(id) {
-    var modeEl = $('tdSecMode-' + id);
-    var req = $('tdSecRequireSeb-' + id);
-    if (!modeEl || !req) return;
-    if (modeEl.value === 'seb' || modeEl.value === 'supervised') req.checked = true;
-    else req.checked = false;
-  }
+  function onSecurityModeChange() { /* no-op: SEB removed */ }
 
   function _dtLocalToIso(v) {
     if (!v) return null;
-    // Treat datetime-local as naive UTC for the exam window API.
     return String(v).length === 16 ? String(v) + ':00' : String(v);
   }
 
   async function saveSecurity(id) {
     var mode = (($('tdSecMode-' + id) || {}).value) || 'standard';
+    if (mode === 'seb') mode = 'standard';
     var maxRaw = (($('tdSecMaxInt-' + id) || {}).value || '').trim();
     var payload = {
       security_mode: mode,
-      require_seb: !!($('tdSecRequireSeb-' + id) && $('tdSecRequireSeb-' + id).checked),
+      require_seb: false,
       allow_resume: !!($('tdSecAllowResume-' + id) && $('tdSecAllowResume-' + id).checked),
       warn_on_focus_loss: !!($('tdSecWarnFocus-' + id) && $('tdSecWarnFocus-' + id).checked),
       auto_submit_on_expiry: !!($('tdSecAutoSubmit-' + id) && $('tdSecAutoSubmit-' + id).checked),
@@ -278,9 +261,6 @@
       exam_window_start: _dtLocalToIso((($('tdSecWinStart-' + id) || {}).value) || ''),
       exam_window_end: _dtLocalToIso((($('tdSecWinEnd-' + id) || {}).value) || ''),
     };
-    var bek = (($('tdSecBek-' + id) || {}).value || '').trim();
-    if (bek) payload.seb_browser_exam_keys = bek;
-    if (mode === 'seb' || mode === 'supervised') payload.require_seb = true;
     try {
       var updated = await lmsApi('/api/lms/quizzes/' + id, {
         method: 'PATCH',
@@ -291,33 +271,13 @@
       if (row) {
         row.security = updated.security || row.security;
         row.security_mode = (updated.security && updated.security.security_mode) || mode;
-        row.require_seb = !!(updated.security && updated.security.require_seb);
+        row.require_seb = false;
       }
       if (state.previews[id] && updated.security) state.previews[id].security = updated.security;
       U.toast('Exam security settings saved (' + mode + ')');
       render();
     } catch (err) {
       U.toast(err.message || 'Could not save security settings', 'error');
-    }
-  }
-
-  async function rotateSebKey(id) {
-    if (!window.confirm('Rotate the SEB config key? Existing downloaded .seb configs for this quiz will stop working until students download a new one.')) return;
-    try {
-      var updated = await lmsApi('/api/lms/quizzes/' + id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rotate_seb_config_key: true, require_seb: true })
-      });
-      var row = state.quizzes.find(function (z) { return z.id === id; });
-      if (row && updated.security) {
-        row.security = updated.security;
-        row.require_seb = true;
-      }
-      U.toast('SEB config key rotated. Download a fresh SEB config.');
-      render();
-    } catch (err) {
-      U.toast(err.message || 'Could not rotate SEB key', 'error');
     }
   }
 
@@ -474,7 +434,7 @@
 
   window.tdQuizzes = {
     load: load, render: render, setTab: setTab, toggle: toggle, publish: publish, remove: remove,
-    saveDuration: saveDuration, saveSecurity: saveSecurity, rotateSebKey: rotateSebKey,
+    saveDuration: saveDuration, saveSecurity: saveSecurity,
     onSecurityModeChange: onSecurityModeChange, syncImportAll: syncImportAll,
     openCreate: openCreate, closeCreate: closeCreate, onFileChosen: onFileChosen, openAssign: openAssign,
     _state: state

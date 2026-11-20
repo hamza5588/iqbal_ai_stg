@@ -60,5 +60,6 @@ def test_teacher_quizzes_security_panel_markers():
     js = ROOT / "static" / "teacher" / "js" / "teacher-quizzes.js"
     text = js.read_text(encoding="utf-8")
     assert "securityPanelHtml" in text
-    assert "Mode A" in text and "Mode B" in text and "Mode C" in text
+    assert "Soft lock" in text and "Supervised" in text
+    assert "Safe Exam Browser" not in text
     assert "saveSecurity" in text

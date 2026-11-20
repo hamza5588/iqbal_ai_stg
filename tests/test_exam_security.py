@@ -117,7 +117,8 @@ def test_standard_mode_allows_start_without_seb(db, monkeypatch):
     assert resumed is False and done is False
 
 
-def test_seb_required_rejects_missing_headers(db, monkeypatch):
+def test_legacy_seb_flag_no_longer_blocks_normal_browser(db, monkeypatch):
+    """CEO policy: third-party SEB removed — require_seb in DB must not block Chrome."""
     a, q, student = _seed_quiz(db, require_seb=True, security_mode="seb")
     ess.ensure_seb_config_key(a)
     monkeypatch.setattr(
@@ -126,9 +127,10 @@ def test_seb_required_rejects_missing_headers(db, monkeypatch):
     )
     monkeypatch.delenv("EXAM_SECURITY_SEB_BYPASS", raising=False)
     monkeypatch.setattr(ess, "_seb_bypass_allowed", lambda: False)
-    with pytest.raises(LMSValidationError) as exc:
-        attempt_service.start_attempt(student.id, a.id)
-    assert "Safe Exam Browser" in str(exc.value)
+    attempt, resumed, done = attempt_service.start_attempt(student.id, a.id)
+    assert attempt.status == "in_progress"
+    assert ess.policy_for(a)["require_seb"] is False
+    assert resumed is False and done is False
 
 
 def test_seb_config_key_header_accepts_valid_hash(db, monkeypatch):

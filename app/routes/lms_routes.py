@@ -793,8 +793,7 @@ def start_quiz_attempt(quiz_id: int):
             payload.update(timer)
         return json_success(payload, status=201)
     except LMSValidationError as e:
-        code = "seb_required" if "Safe Exam Browser" in str(e) else "validation_error"
-        return json_error(str(e), code=code, status=403 if code == "seb_required" else 400)
+        return json_error(str(e), code="validation_error")
 
 
 @bp.route("/attempts/<int:attempt_id>/timer", methods=["GET"])
@@ -890,42 +889,13 @@ def get_attempt_security_events(attempt_id: int):
 @bp.route("/quizzes/<int:quiz_id>/seb-config", methods=["GET"])
 @login_required
 def download_seb_config(quiz_id: int):
-    """Download examination-specific SEB JSON config (open with Safe Exam Browser)."""
-    try:
-        from flask import Response
-        import json as _json
-        from app.services.lms import exam_security_service
-
-        assessment = assessment_service.get_assessment(quiz_id)
-        role = _current_role()
-        uid = _current_user_id()
-        if role == "student":
-            if assessment.assessment_type == "quiz":
-                if not assignment_service.student_is_assigned_quiz(uid, quiz_id):
-                    return json_error("Forbidden", code="forbidden", status=403)
-            elif assessment.assessment_type != "diagnostic":
-                return json_error("Forbidden", code="forbidden", status=403)
-        elif role == "teacher" and assessment.created_by != uid and assessment.assessment_type != "diagnostic":
-            return json_error("Forbidden", code="forbidden", status=403)
-
-        start_url = request.args.get("start_url") or request.host_url.rstrip("/") + "/"
-        cfg = exam_security_service.build_seb_config_dict(assessment, start_url)
-        body = _json.dumps(cfg, indent=2)
-        # Students open this via seb://https://…/seb-config (SEB protocol) or Save As.
-        # Filename ends in .seb so Windows file association can launch SEB.
-        return Response(
-            body,
-            mimetype="application/seb",
-            headers={
-                "Content-Disposition": f'attachment; filename="iqbalai-exam-{quiz_id}.seb"',
-                "Cache-Control": "no-store",
-                "X-IqbalAI-SEB-Open-Link": (
-                    "seb://" + request.host_url.rstrip("/") + f"/api/lms/quizzes/{quiz_id}/seb-config"
-                ),
-            },
-        )
-    except LMSNotFoundError as e:
-        return json_error(str(e), code="not_found", status=404)
+    """Retired: third-party Safe Exam Browser is not used. In-app soft lock only."""
+    return json_error(
+        "Safe Exam Browser configs are no longer used. "
+        "IqbalAI exams use in-app soft lock only (normal browser).",
+        code="seb_removed",
+        status=410,
+    )
 
 
 @bp.route("/attempts/<int:attempt_id>/questions", methods=["GET"])
@@ -1605,8 +1575,8 @@ def quizzes():
                     "time_limit_minutes": q.time_limit_minutes,
                     "question_count": len(q.questions),
                     "security": exam_security_service.serialize_policy(q),
-                    "security_mode": getattr(q, "security_mode", None) or "standard",
-                    "require_seb": bool(getattr(q, "require_seb", False)),
+                    "security_mode": exam_security_service.policy_for(q)["security_mode"],
+                    "require_seb": False,
                 }
                 for q in qs
             ]
