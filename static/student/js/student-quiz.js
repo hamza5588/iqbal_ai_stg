@@ -136,6 +136,49 @@
   };
   window.exitLmsQuizTaking = window.closeLmsStudentHub;
 
+  function sebConfigHttpsUrl(quizId) {
+    return window.location.origin + '/api/lms/quizzes/' + quizId + '/seb-config';
+  }
+
+  function sebOpenProtocolUrl(quizId) {
+    // Official SEB pattern: seb:// + absolute https URL of the config file.
+    return 'seb://' + sebConfigHttpsUrl(quizId);
+  }
+
+  function showSebLaunchHelp(quizId, serverMsg) {
+    var existing = document.getElementById('lmsSebLaunchHelp');
+    if (existing) existing.remove();
+    var httpsUrl = sebConfigHttpsUrl(quizId);
+    var sebLink = sebOpenProtocolUrl(quizId);
+    var box = document.createElement('div');
+    box.id = 'lmsSebLaunchHelp';
+    box.setAttribute('role', 'dialog');
+    box.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    box.innerHTML =
+      '<div style="max-width:480px;width:100%;background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:inherit;color:#0f172a;">' +
+        '<h3 style="margin:0 0 8px;font-size:18px;">Open this exam in Safe Exam Browser</h3>' +
+        '<p style="margin:0 0 14px;font-size:14px;line-height:1.45;color:#334155;">' +
+          (serverMsg ? String(serverMsg).replace(/</g, '&lt;') + '<br><br>' : '') +
+          'Click the button below. Windows should ask to open <b>Safe Exam Browser</b>. ' +
+          'If nothing happens, download the config and open it with SEB (Right‑click → Open with).' +
+        '</p>' +
+        '<div style="display:flex;flex-direction:column;gap:8px;">' +
+          '<a id="lmsSebOpenBtn" href="' + sebLink + '" style="display:block;text-align:center;padding:12px 14px;border-radius:10px;background:#1d4ed8;color:#fff;font-weight:700;text-decoration:none;">Open in Safe Exam Browser</a>' +
+          '<a href="' + httpsUrl + '" download style="display:block;text-align:center;padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;color:#0f172a;font-weight:600;text-decoration:none;">Download .seb config</a>' +
+          '<a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noopener" style="display:block;text-align:center;padding:8px;font-size:13px;color:#1d4ed8;">Install Safe Exam Browser (if missing)</a>' +
+          '<button type="button" id="lmsSebHelpClose" style="margin-top:4px;padding:10px;border:none;background:#f1f5f9;border-radius:10px;font-weight:600;cursor:pointer;">Close</button>' +
+        '</div>' +
+        '<p style="margin:12px 0 0;font-size:12px;color:#64748b;word-break:break-all;">SEB link:<br>' + sebLink.replace(/</g, '&lt;') + '</p>' +
+      '</div>';
+    document.body.appendChild(box);
+    document.getElementById('lmsSebHelpClose').onclick = function () { box.remove(); };
+    box.addEventListener('click', function (e) { if (e.target === box) box.remove(); });
+    // Also try launching immediately (same as clicking the button).
+    try {
+      window.location.href = sebLink;
+    } catch (e) { /* ignore */ }
+  }
+
   window.startLmsQuiz = async function (quizId, asgId, title) {
     assignmentId = asgId;
     quizTitle = title || 'Quiz';
@@ -155,8 +198,9 @@
         var errObj = body.error;
         var code = (errObj && errObj.code) || body.code;
         var msg = (errObj && typeof errObj === 'object' && errObj.message) ? errObj.message : (body.error || body.message || 'Start failed');
-        if (code === 'seb_required') {
-          msg += ' Download SEB config: /api/lms/quizzes/' + quizId + '/seb-config';
+        if (code === 'seb_required' || /Safe Exam Browser|missing_seb/i.test(String(msg))) {
+          showSebLaunchHelp(quizId, msg);
+          return;
         }
         throw new Error(msg);
       }

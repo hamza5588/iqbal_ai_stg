@@ -911,12 +911,17 @@ def download_seb_config(quiz_id: int):
         start_url = request.args.get("start_url") or request.host_url.rstrip("/") + "/"
         cfg = exam_security_service.build_seb_config_dict(assessment, start_url)
         body = _json.dumps(cfg, indent=2)
+        # Students open this via seb://https://…/seb-config (SEB protocol) or Save As.
+        # Filename ends in .seb so Windows file association can launch SEB.
         return Response(
             body,
-            mimetype="application/json",
+            mimetype="application/seb",
             headers={
-                "Content-Disposition": f'attachment; filename="iqbalai-exam-{quiz_id}.seb.json"',
+                "Content-Disposition": f'attachment; filename="iqbalai-exam-{quiz_id}.seb"',
                 "Cache-Control": "no-store",
+                "X-IqbalAI-SEB-Open-Link": (
+                    "seb://" + request.host_url.rstrip("/") + f"/api/lms/quizzes/{quiz_id}/seb-config"
+                ),
             },
         )
     except LMSNotFoundError as e:
