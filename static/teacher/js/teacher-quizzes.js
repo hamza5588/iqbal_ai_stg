@@ -4,7 +4,10 @@
    GET /api/lms/quizzes → [{id,title,status}], GET /api/lms/quizzes/:id/preview, POST /api/lms/quizzes/:id/publish. */
 (function () {
   var U = window.tdUtil;
-  var state = { quizzes: [], tab: 'all', expandedId: null, previews: {}, loaded: false };
+  var state = {
+    quizzes: [], tab: 'all', expandedId: null, previews: {}, loaded: false,
+    livePoll: {}, knownLocked: {}, audioUnlocked: false
+  };
 
   function $(id) { return document.getElementById(id); }
 
@@ -115,6 +118,9 @@
   function securityPill(z) {
     var sec = z.security || {};
     var mode = sec.security_mode || z.security_mode || 'standard';
+    if (mode === 'strict') {
+      return '<span class="td-pill" title="Strict: lock on tab leave, teacher unlock"><i class="fas fa-lock"></i> Strict</span>';
+    }
     if (mode === 'supervised') {
       return '<span class="td-pill" title="In-app supervised soft lock"><i class="fas fa-shield-halved"></i> Supervised</span>';
     }
@@ -135,13 +141,14 @@
     if (winEnd.indexOf('T') === -1 && winEnd.length >= 16) winEnd = winEnd.replace(' ', 'T');
     return '<div class="td-exam-security" id="tdExamSecurity-' + z.id + '" data-quiz-id="' + z.id + '">' +
       '<h4 class="td-exam-security-title"><i class="fas fa-shield-halved"></i> Exam security (IqbalAI only)</h4>' +
-      '<p class="td-help" style="margin:0 0 12px;">No third-party browser install. Soft lock runs inside IqbalAI (fullscreen, tab/focus warnings, heartbeat, server timer). Soft signals are logged for review — they do not auto-fail a student.</p>' +
+      '<p class="td-help" style="margin:0 0 12px;">No third-party install. Soft lock = warnings. Strict = lock exam on tab/app leave; you unlock &amp; resume. Timer keeps running while locked.</p>' +
       '<div class="td-exam-security-grid">' +
         '<div class="td-field">' +
           '<label for="tdSecMode-' + z.id + '">Security mode</label>' +
           '<select id="tdSecMode-' + z.id + '">' +
             '<option value="standard"' + (mode === 'standard' ? ' selected' : '') + '>Soft lock — normal browser</option>' +
             '<option value="supervised"' + (mode === 'supervised' ? ' selected' : '') + '>Supervised — soft lock + exam window</option>' +
+            '<option value="strict"' + (mode === 'strict' ? ' selected' : '') + '>Strict — lock on leave (Chromebook labs)</option>' +
           '</select>' +
         '</div>' +
         '<div class="td-field td-check-stack">' +
@@ -165,8 +172,10 @@
       '</div>' +
       '<div class="td-exam-security-actions">' +
         '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.saveSecurity(' + z.id + ')"><i class="fas fa-save"></i> Save security settings</button>' +
+        '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.toggleLiveSecurity(' + z.id + ')"><i class="fas fa-bell"></i> Live security</button>' +
       '</div>' +
-      '<p class="td-help td-exam-security-note"><b>Note:</b> Soft lock is not OS-level lockdown. For high-stakes exams, use invigilators / school lab supervision.</p>' +
+      '<div id="tdLiveSec-' + z.id + '" class="td-live-security" hidden></div>' +
+      '<p class="td-help td-exam-security-note"><b>Note:</b> Not OS lockdown. Strict Mode detects browser tab/focus/fullscreen leave — phones and some ChromeOS shortcuts may still be undetectable. Use lab supervision.</p>' +
     '</div>';
   }
 
@@ -278,6 +287,141 @@
       render();
     } catch (err) {
       U.toast(err.message || 'Could not save security settings', 'error');
+    }
+  }
+
+  function _teacherBeep() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return false;
+      var ctx = new Ctx();
+      var o = ctx.createOscillator();
+      var g = ctx.createGain();
+      o.frequency.value = 660;
+      g.gain.value = 0.12;
+      o.connect(g); g.connect(ctx.destination);
+      o.start();
+      setTimeout(function () { try { o.stop(); ctx.close(); } catch (e) {} }, 350);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function stopLiveSecurity(quizId) {
+    if (state.livePoll[quizId]) {
+      clearInterval(state.livePoll[quizId]);
+      delete state.livePoll[quizId];
+    }
+  }
+
+  function toggleLiveSecurity(quizId) {
+    var panel = $('tdLiveSec-' + quizId);
+    if (!panel) return;
+    if (!panel.hidden) {
+      panel.hidden = true;
+      stopLiveSecurity(quizId);
+      return;
+    }
+    panel.hidden = false;
+    state.audioUnlocked = true;
+    _teacherBeep();
+    refreshLiveSecurity(quizId);
+    stopLiveSecurity(quizId);
+    state.livePoll[quizId] = setInterval(function () { refreshLiveSecurity(quizId); }, 4000);
+  }
+
+  async function refreshLiveSecurity(quizId) {
+    var panel = $('tdLiveSec-' + quizId);
+    if (!panel || panel.hidden) return;
+    try {
+      var data = await lmsApi('/api/lms/quizzes/' + quizId + '/live-security');
+      var attempts = (data && data.attempts) || [];
+      var locked = attempts.filter(function (a) { return a.is_locked; });
+      locked.forEach(function (a) {
+        var key = quizId + ':' + a.attempt_id;
+        if (!state.knownLocked[key]) {
+          state.knownLocked[key] = true;
+          var heard = _teacherBeep();
+          U.toast(
+            'Security Alert — Exam Locked: ' + (a.student_name || ('Student #' + a.student_id)) +
+            (heard ? '' : ' (enable sound / check visual banner)'),
+            'error'
+          );
+        }
+      });
+      attempts.filter(function (a) { return !a.is_locked; }).forEach(function (a) {
+        delete state.knownLocked[quizId + ':' + a.attempt_id];
+      });
+      if (!attempts.length) {
+        panel.innerHTML = '<p class="td-help">No students currently in this exam.</p>';
+        return;
+      }
+      panel.innerHTML =
+        '<div class="td-live-sec-head"><strong>Live security</strong> — ' +
+        (data.locked_count || 0) + ' locked / ' + (data.active_count || 0) + ' active</div>' +
+        '<div class="td-live-sec-list">' +
+        attempts.map(function (a) {
+          var qn = a.current_question_index != null ? ('Q' + (a.current_question_index + 1)) : '—';
+          return '<div class="td-live-sec-row' + (a.is_locked ? ' locked' : '') + '">' +
+            '<div><b>' + U.esc(a.student_name || ('#' + a.student_id)) + '</b> · ' +
+            U.esc(a.status) + (a.lock_reason ? (' · ' + U.esc(a.lock_reason)) : '') +
+            ' · ' + qn + '</div>' +
+            '<div class="td-live-sec-actions">' +
+            (a.is_locked
+              ? '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.unlockAttempt(' + a.attempt_id + ',' + quizId + ')">Unlock &amp; Resume</button>'
+              : '') +
+            '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.extendAttempt(' + a.attempt_id + ',' + quizId + ')">Extend +5 min</button>' +
+            '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.viewViolations(' + a.attempt_id + ')">Violations</button>' +
+            '</div></div>';
+        }).join('') +
+        '</div>';
+    } catch (err) {
+      panel.innerHTML = '<p class="td-error">' + U.esc(err.message || 'Live security failed') + '</p>';
+    }
+  }
+
+  async function unlockAttempt(attemptId, quizId) {
+    try {
+      await lmsApi('/api/lms/attempts/' + attemptId + '/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Teacher unlock & resume' })
+      });
+      U.toast('Exam unlocked — student can resume same attempt');
+      delete state.knownLocked[quizId + ':' + attemptId];
+      refreshLiveSecurity(quizId);
+    } catch (err) {
+      U.toast(err.message || 'Unlock failed', 'error');
+    }
+  }
+
+  async function extendAttempt(attemptId, quizId) {
+    try {
+      await lmsApi('/api/lms/attempts/' + attemptId + '/extend-time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          minutes: 5,
+          reason: 'Teacher extension',
+          idempotency_key: 'ext-' + attemptId + '-' + Date.now()
+        })
+      });
+      U.toast('Extended exam by 5 minutes');
+      refreshLiveSecurity(quizId);
+    } catch (err) {
+      U.toast(err.message || 'Extend failed', 'error');
+    }
+  }
+
+  async function viewViolations(attemptId) {
+    try {
+      var data = await lmsApi('/api/lms/attempts/' + attemptId + '/security-events');
+      var events = (data && data.events) || [];
+      var lines = events.slice(0, 30).map(function (e) {
+        return (e.created_at || '') + ' · ' + e.event_type + (e.message ? (' — ' + e.message) : '');
+      });
+      alert(lines.length ? lines.join('\n') : 'No security events yet.');
+    } catch (err) {
+      U.toast(err.message || 'Could not load events', 'error');
     }
   }
 
@@ -435,6 +579,8 @@
   window.tdQuizzes = {
     load: load, render: render, setTab: setTab, toggle: toggle, publish: publish, remove: remove,
     saveDuration: saveDuration, saveSecurity: saveSecurity,
+    toggleLiveSecurity: toggleLiveSecurity, unlockAttempt: unlockAttempt,
+    extendAttempt: extendAttempt, viewViolations: viewViolations,
     onSecurityModeChange: onSecurityModeChange, syncImportAll: syncImportAll,
     openCreate: openCreate, closeCreate: closeCreate, onFileChosen: onFileChosen, openAssign: openAssign,
     _state: state

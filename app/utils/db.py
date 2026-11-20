@@ -309,6 +309,12 @@ def init_db(app):
                 migrate_exam_security(engine)
             except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
                 logger.warning("exam security migration warning: %s", e)
+            try:
+                from app.migrations.strict_exam_mode import run_migration as migrate_strict_exam
+
+                migrate_strict_exam(engine)
+            except Exception as e:  # noqa: BLE001 - never block startup on an additive migration
+                logger.warning("strict exam mode migration warning: %s", e)
             from app.services.tutor_usage_service import initialize_tracking
             initialize_tracking(engine)
             

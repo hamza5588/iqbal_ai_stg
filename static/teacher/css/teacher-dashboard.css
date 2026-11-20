@@ -505,6 +505,20 @@ table.td-data tr.td-expanded > td { background: #f5f9ff; }
   align-items: center;
   margin-bottom: 8px;
 }
+.td-live-security {
+  margin: 10px 0 12px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  background: #fff7ed;
+  border-radius: 10px;
+}
+.td-live-sec-head { margin-bottom: 8px; font-size: 13px; }
+.td-live-sec-row {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between;
+  align-items: center; padding: 8px 0; border-top: 1px solid #fed7aa;
+}
+.td-live-sec-row.locked { background: #fee2e2; margin: 0 -8px; padding: 8px; border-radius: 8px; }
+.td-live-sec-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .td-exam-security-note {
   margin: 0;
   padding-top: 6px;

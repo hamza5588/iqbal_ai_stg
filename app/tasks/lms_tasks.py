@@ -261,7 +261,7 @@ def finalize_expired_attempts_batch(limit: int = 100) -> dict:
     rows = (
         db.query(AssessmentAttempt)
         .filter(
-            AssessmentAttempt.status == "in_progress",
+            AssessmentAttempt.status.in_(("in_progress", "locked")),
             AssessmentAttempt.expires_at.isnot(None),
             AssessmentAttempt.expires_at <= now,
         )

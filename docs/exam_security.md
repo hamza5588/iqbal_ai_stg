@@ -6,27 +6,33 @@ Third-party clients (including Safe Exam Browser) are **not used**. All lockdown
 
 | Mode | `security_mode` | Behavior |
 |------|-----------------|----------|
-| Soft lock | `standard` | Normal browser + fullscreen request, tab/focus warnings, heartbeat, server timer / auto-submit |
-| Supervised | `supervised` | Soft lock + optional exam window (`exam_window_start` / `exam_window_end`) |
+| Soft lock | `standard` | Normal browser + fullscreen request, tab/focus warnings, heartbeat, server timer |
+| Supervised | `supervised` | Soft lock + optional exam window |
+| **Strict** | `strict` | Soft lock + **server LOCK** on tab hide / blur / fullscreen exit; teacher unlock & resume; timer keeps running |
 
-Legacy DB values `seb` / `require_seb=true` are treated as soft lock (`require_seb` always forced off).
+Legacy DB values `seb` / `require_seb=true` are treated as soft lock.
 
-## Soft signals
+## Strict Exam Mode (Chromebook labs)
 
-Tab hide, blur, fullscreen exit, etc. are logged as **unverified** review signals. They do **not** auto-fail a student.
+1. Student must enter fullscreen before the attempt is usable.
+2. Leaving the exam window locks the attempt (`status=locked`); answers/submit rejected server-side.
+3. Teacher **Live security** panel (Quizzes → expand → Live security) polls every ~4s, beeps on new locks.
+4. **Unlock & Resume** restores the same attempt (same answers, question index, deadline).
+5. **Extend +5 min** bumps `expires_at` (audit in `attempt_time_extensions`).
+6. Deadline never pauses while locked; expiry while locked still auto-submits.
 
-## Teacher UI
+Soft focus events are **not** automatic fails — they are review signals. Lock is an invigilator workflow, not a grade penalty by itself.
 
-Quizzes → expand quiz → **Exam security (IqbalAI only)**. Asset cache-bust: `asset_v=20261121noseb1`.
+## APIs
 
-## API
+- `POST /api/lms/attempts/:id/security-events` — may lock in strict mode
+- `POST /api/lms/attempts/:id/unlock` — teacher
+- `POST /api/lms/attempts/:id/extend-time` — teacher `{seconds|minutes, idempotency_key?}`
+- `GET /api/lms/quizzes/:id/live-security` — teacher poll
+- Heartbeat returns `is_locked` / `status` for student sync
 
-- `PATCH /api/lms/quizzes/:id` — security settings (`security_mode`, resume/focus/expiry knobs, exam window)
-- `GET /api/lms/quizzes/:id/seb-config` — retired (`410 seb_removed`)
-- Heartbeat + security-events on attempts
+## Limits (honest)
 
-## Limits
+A website cannot block every ChromeOS shortcut, second phone, or other account. Strict Mode is the strongest **first-party browser** enforcement IqbalAI offers; pair with in-room teachers.
 
-Soft lock is **not** OS-level lockdown (Alt+Tab, screenshots, other apps). For high-stakes exams use invigilators / school lab supervision.
-
-See also: [`exam_security_qa_report.md`](exam_security_qa_report.md), [`exam_security_deploy_readiness.md`](exam_security_deploy_readiness.md).
+Asset bust: `20261121strict1`.

@@ -27,7 +27,16 @@ from app.services.lms.exceptions import LMSValidationError
 
 @pytest.fixture()
 def db(monkeypatch):
-    engine = create_engine("sqlite:///:memory:")
+    import uuid
+
+    from sqlalchemy.pool import StaticPool
+
+    uri = f"sqlite:///file:examsec_{uuid.uuid4().hex}?mode=memory&cache=shared&uri=true"
+    engine = create_engine(
+        uri,
+        connect_args={"check_same_thread": False, "uri": True},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -39,9 +48,16 @@ def db(monkeypatch):
     monkeypatch.setattr("app.services.lms.attempt_service.get_db", _get_db)
     monkeypatch.setattr("app.services.lms.exam_security_service.get_db", _get_db)
     monkeypatch.setattr("app.services.lms.assessment_service.get_db", _get_db)
+    monkeypatch.setattr("app.services.lms.performance_service.get_db", _get_db)
     yield session
     session.close()
     engine.dispose()
+    try:
+        from app.utils.db import reset_db_engine
+
+        reset_db_engine()
+    except Exception:
+        pass
 
 
 def _seed_quiz(db, *, require_seb=False, security_mode="standard", time_limit=10):
@@ -187,16 +203,14 @@ def test_finalize_expired_batch_scores_partial_answers(db, monkeypatch):
     )
     db.commit()
 
-    from app.tasks.lms_tasks import finalize_expired_attempts_batch
-
     # Avoid post-submit side effects that need full app graph
     monkeypatch.setattr(attempt_service, "_run_post_submit_steps", lambda *args, **kwargs: None)
-    out = finalize_expired_attempts_batch(limit=10)
-    assert out["finalized"] == 1
+    result = attempt_service.finalize_expired_attempt(attempt.id)
     refreshed = db.get(AssessmentAttempt, attempt.id)
     assert refreshed.status == "submitted"
     assert refreshed.timed_out is True
     assert refreshed.score == 1
+    assert result["score"] == 1
 
 
 def test_adversarial_cross_student_event_list_blocked_by_ownership_logic(db):

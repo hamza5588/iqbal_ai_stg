@@ -200,8 +200,7 @@ class Assessment(Base):
     # Students who already existed at superseded_at still take it first (if not submitted);
     # brand-new accounts only see the current published diagnostic.
     superseded_at = Column(DateTime, nullable=True)
-    # Exam security (Mode A soft / Mode B SEB / Mode C supervised). Defaults keep
-    # existing quizzes unchanged (standard browser + soft lockdown only).
+    # Exam security: standard (soft), supervised (soft+window), strict (lock on leave).
     security_mode = Column(String(32), nullable=False, default="standard", server_default="standard")
     require_seb = Column(Boolean, nullable=False, default=False, server_default="0")
     allow_resume = Column(Boolean, nullable=False, default=True, server_default="1")
@@ -255,7 +254,7 @@ class Assessment(Base):
             name="check_assessment_status",
         ),
         CheckConstraint(
-            "security_mode IN ('standard','seb','supervised')",
+            "security_mode IN ('standard','seb','supervised','strict')",
             name="check_assessment_security_mode",
         ),
     )
@@ -452,6 +451,11 @@ class AssessmentAttempt(Base):
     client_fingerprint = Column(String(128), nullable=True)
     last_security_event_at = Column(DateTime, nullable=True)
     finalized_reason = Column(String(64), nullable=True)  # submit|timeout|policy|invigilator
+    # Strict Exam Mode lock (server-authoritative). Timer keeps running while locked.
+    locked_at = Column(DateTime, nullable=True)
+    lock_reason = Column(String(128), nullable=True)
+    lock_event_id = Column(Integer, nullable=True)
+    current_question_index = Column(Integer, nullable=True)
 
     answers = relationship(
         "AttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"
@@ -459,9 +463,31 @@ class AssessmentAttempt(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('in_progress','submitted','abandoned')",
+            "status IN ('in_progress','locked','submitted','abandoned')",
             name="check_attempt_status",
         ),
+    )
+
+
+class AttemptTimeExtension(Base):
+    """Teacher-granted extra seconds on an attempt deadline (audit trail)."""
+
+    __tablename__ = "attempt_time_extensions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    attempt_id = Column(
+        Integer, ForeignKey("assessment_attempts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    teacher_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    seconds = Column(Integer, nullable=False)
+    reason = Column(String(512), nullable=True)
+    idempotency_key = Column(String(64), nullable=True, index=True)
+    previous_expires_at = Column(DateTime, nullable=True)
+    new_expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "idempotency_key", name="uq_attempt_time_ext_idem"),
     )
 
 

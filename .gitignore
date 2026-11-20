@@ -72,9 +72,12 @@ tests/*
 !tests/test_exam_security.py
 !tests/test_exam_security_extended.py
 !tests/test_exam_security_regression.py
+!tests/test_strict_exam_mode.py
 !app/migrations/
 !app/migrations/__init__.py
 !app/migrations/student_reporting.py
+!app/migrations/exam_security.py
+!app/migrations/strict_exam_mode.py
 chatbot.db
 tmp/
 Deep Research Module.pdf

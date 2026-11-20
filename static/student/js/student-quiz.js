@@ -136,6 +136,36 @@
   };
   window.exitLmsQuizTaking = window.closeLmsStudentHub;
 
+  window.lmsExamCurrentQuestionIndex = function () { return currentQ; };
+
+  window.lmsExamOnLocked = function () {
+    var el = document.getElementById('lmsQuizTaking');
+    if (el) el.setAttribute('data-exam-locked', '1');
+  };
+  window.lmsExamOnUnlocked = async function () {
+    var el = document.getElementById('lmsQuizTaking');
+    if (el) el.removeAttribute('data-exam-locked');
+    if (typeof window.lmsExamSecurityRequestFullscreen === 'function') {
+      try { await window.lmsExamSecurityRequestFullscreen(); } catch (e) { /* user may need gesture */ }
+    }
+    render();
+  };
+
+  window.lmsExamSecurityOnHeartbeat = function (d) {
+    if (!d) return;
+    if (d.remaining_seconds != null) {
+      remainingSeconds = Math.max(0, Math.floor(Number(d.remaining_seconds)));
+      var tEl = document.getElementById('lmsQuizTimer');
+      if (tEl && remainingSeconds != null) {
+        var m = Math.floor(remainingSeconds / 60), s = remainingSeconds % 60;
+        tEl.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+      }
+    }
+    if (d.status === 'submitted' || d.is_expired) {
+      submitLmsQuiz(true);
+    }
+  };
+
   window.startLmsQuiz = async function (quizId, asgId, title) {
     assignmentId = asgId;
     quizTitle = title || 'Quiz';
@@ -153,7 +183,6 @@
       var body = await res.json();
       if (!res.ok) {
         var errObj = body.error;
-        var code = (errObj && errObj.code) || body.code;
         var msg = (errObj && typeof errObj === 'object' && errObj.message) ? errObj.message : (body.error || body.message || 'Start failed');
         throw new Error(msg);
       }
@@ -164,6 +193,21 @@
         rem = Math.max(0, Math.floor(Number(d.time_limit_minutes) * 60));
       }
       remainingSeconds = rem != null ? Math.max(0, Math.floor(Number(rem))) : null;
+      var sec = d.security || {};
+      var strict = !!(sec.is_strict || sec.lock_on_leave || sec.security_mode === 'strict');
+      if (strict && !(d.is_locked || d.status === 'locked')) {
+        if (typeof window.lmsExamSecurityRequestFullscreen === 'function') {
+          try {
+            await window.lmsExamSecurityRequestFullscreen();
+          } catch (fsErr) {
+            throw new Error('Fullscreen is required for Strict Exam Mode. Allow fullscreen and try again.');
+          }
+          var fs = document.fullscreenElement || document.webkitFullscreenElement;
+          if (!fs) {
+            throw new Error('Fullscreen is required for Strict Exam Mode. Allow fullscreen and try again.');
+          }
+        }
+      }
       if (d.resumed && typeof lmsShowToast === 'function') lmsShowToast('Resuming where you left off', 'success');
       if (remainingSeconds != null && remainingSeconds <= 0) {
         await submitLmsQuiz(true);
@@ -175,8 +219,12 @@
         window.lmsExamSecurityStart({
           attemptId: attemptId,
           sessionToken: d.session_token,
-          security: d.security,
-          requestFullscreen: true
+          security: sec,
+          requestFullscreen: !(d.is_locked || d.status === 'locked'),
+          locked: !!(d.is_locked || d.status === 'locked'),
+          status: d.status,
+          lock_reason: d.lock_reason,
+          getQuestionIndex: function () { return currentQ; }
         });
       }
       lmsOpenModal('lmsStudentModal');
@@ -233,6 +281,16 @@
         '<button type="button" class="sd-btn sd-btn-outline" onclick="exitLmsQuizTaking()">Close</button>';
       return;
     }
+    if (typeof window.lmsExamSecurityIsLocked === 'function' && window.lmsExamSecurityIsLocked()) {
+      el.innerHTML =
+        '<div class="lms-quiz-taking-head"><span class="lms-quiz-taking-title">' + escapeHtml(quizTitle) + '</span>' +
+        (remainingSeconds != null ? '<span id="lmsQuizTimer" class="sd-timer" style="margin-left:auto;"></span>' : '') +
+        '</div>' +
+        '<div class="lms-exam-locked-inline"><h3>EXAM LOCKED</h3>' +
+        '<p>You left the exam window. Your teacher has been notified.</p>' +
+        '<p>Please wait for your teacher to unlock your exam.</p></div>';
+      return;
+    }
     var idx = currentQ, total = questions.length, q = questions[idx], savedIdx = savedAnswers[idx];
     var pct = Math.round(100 * (idx + 1) / total);
     var answered = Object.keys(savedAnswers).length;
@@ -265,6 +323,7 @@
   }
 
   window.selectLmsQuizOption = function (optIdx) {
+    if (typeof window.lmsExamSecurityIsLocked === 'function' && window.lmsExamSecurityIsLocked()) return;
     savedAnswers[currentQ] = optIdx;
     render();
     var q = questions[currentQ];

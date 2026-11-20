@@ -775,6 +775,7 @@ def start_quiz_attempt(quiz_id: int):
             ),
             "seb_verified": bool(getattr(attempt, "seb_verified", False)),
         }
+        payload.update(exam_security_service.attempt_lock_payload(attempt))
         if already_completed:
             # Diagnostic retakes aren't allowed, but unlike the quiz path
             # (which raises an explicit LMSValidationError below), this
@@ -820,7 +821,9 @@ def attempt_heartbeat(attempt_id: int):
         body = request.get_json(silent=True) or {}
         return json_success(
             attempt_service.heartbeat(
-                attempt_id, session_token=body.get("session_token")
+                attempt_id,
+                session_token=body.get("session_token"),
+                current_question_index=body.get("current_question_index"),
             )
         )
     except LMSNotFoundError as e:
@@ -840,6 +843,15 @@ def post_attempt_security_event(attempt_id: int):
         attempt = attempt_service.get_attempt(attempt_id)
         if attempt.student_id != _current_user_id():
             return json_error("Forbidden", code="forbidden", status=403)
+        if attempt.status == "locked":
+            return json_success(
+                {
+                    "recorded": False,
+                    "reason": "already_locked",
+                    "status": "locked",
+                    **exam_security_service.attempt_lock_payload(attempt),
+                }
+            )
         if attempt.status != "in_progress":
             return json_success({"recorded": False, "reason": "attempt_not_active"})
         body = request.get_json(silent=True) or {}
@@ -853,12 +865,15 @@ def post_attempt_security_event(attempt_id: int):
             context=body.get("context") if isinstance(body.get("context"), dict) else {},
             verified=False,
         )
+        attempt = attempt_service.get_attempt(attempt_id)
         return json_success(
             {
                 "recorded": True,
                 "id": row.id,
                 "interruption_count": int(getattr(attempt, "interruption_count", 0) or 0),
                 "focus_loss_count": int(getattr(attempt, "focus_loss_count", 0) or 0),
+                "locked": bool(getattr(row, "_strict_locked", False)),
+                **exam_security_service.attempt_lock_payload(attempt),
             }
         )
     except LMSNotFoundError as e:
@@ -895,6 +910,104 @@ def download_seb_config(quiz_id: int):
         "IqbalAI exams use in-app soft lock only (normal browser).",
         code="seb_removed",
         status=410,
+    )
+
+
+@bp.route("/attempts/<int:attempt_id>/unlock", methods=["POST"])
+@login_required
+def unlock_attempt(attempt_id: int):
+    """Teacher unlock & resume — same attempt, timer continues, answers preserved."""
+    role = _current_role()
+    if role not in ("teacher", "admin"):
+        return json_error("Only teachers can unlock attempts", code="forbidden", status=403)
+    try:
+        from app.services.lms import exam_security_service
+
+        attempt = attempt_service.get_attempt(attempt_id)
+        if not exam_security_service.teacher_may_manage_attempt(
+            _current_user_id(), attempt, role=role
+        ):
+            return json_error("Forbidden", code="forbidden", status=403)
+        body = request.get_json(silent=True) or {}
+        updated = exam_security_service.unlock_attempt(
+            attempt,
+            teacher_id=_current_user_id(),
+            message=body.get("message"),
+        )
+        timer = attempt_service.get_attempt_timer_info(attempt_id)
+        payload = exam_security_service.attempt_lock_payload(updated)
+        payload.update(timer)
+        payload["session_token"] = updated.session_token
+        payload["unlocked"] = True
+        return json_success(payload)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+
+
+@bp.route("/attempts/<int:attempt_id>/extend-time", methods=["POST"])
+@login_required
+def extend_attempt_time(attempt_id: int):
+    role = _current_role()
+    if role not in ("teacher", "admin"):
+        return json_error("Only teachers can extend exam time", code="forbidden", status=403)
+    try:
+        from app.services.lms import exam_security_service
+
+        attempt = attempt_service.get_attempt(attempt_id)
+        if not exam_security_service.teacher_may_manage_attempt(
+            _current_user_id(), attempt, role=role
+        ):
+            return json_error("Forbidden", code="forbidden", status=403)
+        body = request.get_json(silent=True) or {}
+        seconds = body.get("seconds")
+        if seconds is None and body.get("minutes") is not None:
+            seconds = int(body.get("minutes")) * 60
+        result = exam_security_service.extend_attempt_time(
+            attempt,
+            teacher_id=_current_user_id(),
+            seconds=int(seconds or 0),
+            reason=body.get("reason"),
+            idempotency_key=body.get("idempotency_key"),
+        )
+        timer = attempt_service.get_attempt_timer_info(attempt_id)
+        result.update(timer)
+        return json_success(result)
+    except LMSNotFoundError as e:
+        return json_error(str(e), code="not_found", status=404)
+    except LMSValidationError as e:
+        return json_error(str(e), code="validation_error")
+    except (TypeError, ValueError):
+        return json_error("Invalid extension duration", code="validation_error")
+
+
+@bp.route("/quizzes/<int:quiz_id>/live-security", methods=["GET"])
+@login_required
+def quiz_live_security(quiz_id: int):
+    """Teacher poll: active/locked attempts for Strict Exam Mode supervision."""
+    role = _current_role()
+    if role not in ("teacher", "admin"):
+        return json_error("Teachers only", code="forbidden", status=403)
+    denied, assessment = _require_assessment_owner(quiz_id)
+    if denied:
+        return denied
+    from app.services.lms import exam_security_service
+
+    attempts = exam_security_service.list_live_security_for_assessment(quiz_id)
+    locked = [a for a in attempts if a.get("is_locked")]
+    return json_success(
+        {
+            "quiz_id": quiz_id,
+            "quiz_title": assessment.title if assessment else None,
+            "security_mode": exam_security_service.policy_for(assessment)["security_mode"]
+            if assessment
+            else None,
+            "attempts": attempts,
+            "locked_count": len(locked),
+            "active_count": len(attempts),
+            "server_now": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+        }
     )
 
 

@@ -98,13 +98,14 @@ def _find_in_progress_attempt(
     assessment_id: int,
     assignment_id: Optional[int] = None,
 ) -> Optional[AssessmentAttempt]:
+    """Return active attempt including Strict Mode locked (same attempt resume)."""
     db = get_db()
     q = (
         db.query(AssessmentAttempt)
         .filter(
             AssessmentAttempt.student_id == student_id,
             AssessmentAttempt.assessment_id == assessment_id,
-            AssessmentAttempt.status == "in_progress",
+            AssessmentAttempt.status.in_(("in_progress", "locked")),
         )
         .order_by(AssessmentAttempt.started_at.desc())
     )
@@ -175,19 +176,38 @@ def _touch_attempt(attempt: AssessmentAttempt) -> int:
     return credit
 
 
-def heartbeat(attempt_id: int, *, session_token: Optional[str] = None) -> dict:
+def heartbeat(
+    attempt_id: int,
+    *,
+    session_token: Optional[str] = None,
+    current_question_index: Optional[int] = None,
+) -> dict:
     """Ping from the open quiz page: keeps last_seen fresh and returns the authoritative timer."""
     from app.services.lms import exam_security_service
 
     attempt = get_attempt(attempt_id)
     credited = 0
-    if attempt.status == "in_progress":
+    if attempt.status in ("in_progress", "locked"):
         assessment = get_assessment(attempt.assessment_id)
         if session_token or getattr(attempt, "session_token", None):
             exam_security_service.require_active_session(
-                attempt, assessment, session_token=session_token
+                attempt,
+                assessment,
+                session_token=session_token,
+                allow_locked=True,
             )
-        credited = _touch_attempt(attempt)
+        if current_question_index is not None:
+            try:
+                attempt.current_question_index = max(0, int(current_question_index))
+                get_db().commit()
+            except (TypeError, ValueError):
+                pass
+        if attempt.status == "in_progress":
+            credited = _touch_attempt(attempt)
+        elif attempt.status == "locked":
+            # Timer keeps running while locked — refresh last_seen only.
+            attempt.last_seen_at = datetime.utcnow()
+            get_db().commit()
         if _attempt_is_expired(attempt):
             attempt.finalized_reason = "timeout"
             finalize_expired_attempt(attempt.id)
@@ -202,19 +222,24 @@ def heartbeat(attempt_id: int, *, session_token: Optional[str] = None) -> dict:
         "seb_verified": bool(getattr(attempt, "seb_verified", False)),
         "server_now": datetime.utcnow().isoformat() + "Z",
     })
+    info.update(exam_security_service.attempt_lock_payload(attempt))
     return info
 
 
 def _attempt_is_expired(attempt: AssessmentAttempt) -> bool:
-    if attempt.status == "in_progress" and attempt.expires_at and _is_owner_request(attempt):
-        # give back offline time before deciding the clock has run out
-        if datetime.utcnow() >= attempt.expires_at or (
-            attempt.last_seen_at and (datetime.utcnow() - attempt.last_seen_at).total_seconds() >= OFFLINE_GAP_SECONDS
+    if attempt.status in ("in_progress", "locked") and attempt.expires_at and _is_owner_request(attempt):
+        # give back offline time before deciding the clock has run out (in_progress only)
+        if attempt.status == "in_progress" and (
+            datetime.utcnow() >= attempt.expires_at
+            or (
+                attempt.last_seen_at
+                and (datetime.utcnow() - attempt.last_seen_at).total_seconds() >= OFFLINE_GAP_SECONDS
+            )
         ):
             _touch_attempt(attempt)
     return bool(
         attempt.expires_at
-        and attempt.status == "in_progress"
+        and attempt.status in ("in_progress", "locked")
         and datetime.utcnow() >= attempt.expires_at
     )
 
@@ -246,11 +271,11 @@ def finalize_expired_attempt(attempt_id: int) -> dict:
     attempt = get_attempt(attempt_id)
     if attempt.status == "submitted":
         return get_attempt_results(attempt_id)
-    if attempt.status != "in_progress":
+    if attempt.status not in ("in_progress", "locked"):
         raise LMSValidationError("Attempt is not in progress")
 
     assessment = get_assessment(attempt.assessment_id)
-    logger.info("Finalizing expired diagnostic attempt %s (scoring answered questions)", attempt_id)
+    logger.info("Finalizing expired attempt %s (scoring answered questions)", attempt_id)
     return _score_and_finalize(attempt, assessment, timed_out=True)
 
 
@@ -355,7 +380,8 @@ def start_attempt(
     existing = _find_in_progress_attempt(student_id, assessment_id, assignment_id)
     if existing:
         policy = exam_security_service.policy_for(assessment)
-        if not policy.get("allow_resume", True):
+        # Locked strict attempts must be restorable (still locked) after refresh.
+        if existing.status != "locked" and not policy.get("allow_resume", True):
             raise LMSValidationError(
                 "This examination does not allow resuming an interrupted attempt. "
                 "Ask your teacher or invigilator for help."
@@ -462,9 +488,10 @@ def get_attempt(attempt_id: int) -> AssessmentAttempt:
 def get_attempt_delivery_state(attempt_id: int) -> dict:
     """Questions plus saved answers and resume position for the student UI."""
     attempt = get_attempt(attempt_id)
-    if attempt.status != "in_progress":
+    if attempt.status not in ("in_progress", "locked"):
         raise LMSValidationError("Attempt is not in progress")
-    _check_attempt_expired(attempt)
+    if attempt.status == "in_progress":
+        _check_attempt_expired(attempt)
 
     questions = get_delivery_questions(attempt_id)
     db = get_db()
@@ -498,13 +525,22 @@ def get_attempt_delivery_state(attempt_id: int) -> dict:
         if questions:
             current_index = max(0, len(questions) - 1)
 
-    return {
+    stored_idx = getattr(attempt, "current_question_index", None)
+    if stored_idx is not None and questions:
+        current_index = max(0, min(int(stored_idx), len(questions) - 1))
+
+    from app.services.lms import exam_security_service
+
+    payload = {
         "attempt_id": attempt_id,
         "questions": questions,
         "saved_answers": saved_answers,
         "saved_times": saved_times,
         "current_question_index": current_index,
+        "status": attempt.status,
     }
+    payload.update(exam_security_service.attempt_lock_payload(attempt))
+    return payload
 
 
 def get_delivery_questions(attempt_id: int) -> List[dict]:
@@ -601,6 +637,8 @@ def save_answer(
     - ``time_only`` updates dwell without changing the selected option.
     """
     attempt = get_attempt(attempt_id)
+    if attempt.status == "locked":
+        return {"saved": False, "reason": "exam_locked", "question_id": question_id, "status": "locked"}
     if attempt.status != "in_progress":
         return {"saved": False, "reason": "attempt_not_in_progress", "question_id": question_id}
     if _attempt_is_expired(attempt):
@@ -957,6 +995,8 @@ def submit_attempt(attempt_id: int, time_expired: bool = False, require_all_answ
     attempt = get_attempt(attempt_id)
     if attempt.status == "submitted":
         return get_attempt_results(attempt_id)
+    if attempt.status == "locked":
+        raise LMSValidationError("This examination is locked. Wait for your teacher to unlock it.")
     if attempt.status != "in_progress":
         raise LMSValidationError("Attempt is not in progress")
 

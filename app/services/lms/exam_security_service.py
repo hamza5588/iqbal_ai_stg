@@ -3,10 +3,12 @@
 Modes
 -----
 - ``standard``: soft browser controls + server logging/heartbeat/events.
-- ``supervised``: same soft lock + optional exam window / stricter teacher knobs.
+- ``supervised``: same soft lock + optional exam window.
+- ``strict``: soft lock + server LOCK on tab/focus/fullscreen leave; teacher unlock.
 - Legacy ``seb`` values in the DB are treated as ``standard`` (SEB removed).
 
-Residual risks: soft lock is not OS lockdown; second devices / phone photos remain.
+Residual risks: not OS lockdown; phones / other accounts / some ChromeOS shortcuts
+may be undetectable. Browser signals are review evidence, not automatic fail proof.
 """
 
 from __future__ import annotations
@@ -17,22 +19,29 @@ import json
 import logging
 import os
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 from urllib.parse import urljoin
 
 from flask import has_request_context, request, session
 
 from app.config import Config
-from app.models.lms_models import Assessment, AssessmentAttempt, ExamSecurityEvent
+from app.models.lms_models import (
+    Assessment,
+    AssessmentAttempt,
+    AttemptTimeExtension,
+    ExamSecurityEvent,
+)
 from app.services.lms.exceptions import LMSValidationError
 from app.utils.db import get_db
 
 logger = logging.getLogger(__name__)
 
-SECURITY_MODES = ("standard", "supervised")
+SECURITY_MODES = ("standard", "supervised", "strict")
 # Legacy DB values accepted then normalized away from third-party SEB.
 _LEGACY_SEB_MODES = frozenset({"seb"})
+ACTIVE_ATTEMPT_STATUSES = frozenset({"in_progress", "locked"})
+STRICT_LOCK_EVENTS = frozenset({"tab_hidden", "window_blur", "fullscreen_exit", "focus_loss"})
 EVENT_TYPES = frozenset(
     {
         "fullscreen_exit",
@@ -48,6 +57,9 @@ EVENT_TYPES = frozenset(
         "submit",
         "timeout_finalize",
         "invigilator_override",
+        "exam_locked",
+        "exam_unlocked",
+        "time_extended",
         "api_forbidden",
         "focus_loss",
         "copy_blocked",
@@ -98,9 +110,13 @@ def policy_for(assessment: Assessment) -> dict[str, Any]:
                 extra = parsed
         except (TypeError, ValueError, json.JSONDecodeError):
             pass
+    is_strict = mode == "strict"
     return {
         "security_mode": mode,
         "require_seb": require_seb,
+        "is_strict": is_strict,
+        "require_fullscreen": is_strict or bool(extra.get("require_fullscreen")),
+        "lock_on_leave": is_strict,
         "allow_resume": bool(getattr(assessment, "allow_resume", True)),
         "max_interruptions": getattr(assessment, "max_interruptions", None),
         "max_concurrent_sessions": int(getattr(assessment, "max_concurrent_sessions", 1) or 1),
@@ -118,6 +134,9 @@ def serialize_policy(assessment: Assessment) -> dict[str, Any]:
     return {
         "security_mode": p["security_mode"],
         "require_seb": p["require_seb"],
+        "is_strict": p["is_strict"],
+        "require_fullscreen": p["require_fullscreen"],
+        "lock_on_leave": p["lock_on_leave"],
         "allow_resume": p["allow_resume"],
         "max_interruptions": p["max_interruptions"],
         "max_concurrent_sessions": p["max_concurrent_sessions"],
@@ -127,6 +146,18 @@ def serialize_policy(assessment: Assessment) -> dict[str, Any]:
         "warn_on_focus_loss": p["warn_on_focus_loss"],
         "seb_configured": False,
         "third_party_seb": False,
+    }
+
+
+def attempt_lock_payload(attempt: AssessmentAttempt) -> dict[str, Any]:
+    return {
+        "status": attempt.status,
+        "is_locked": attempt.status == "locked" or bool(getattr(attempt, "locked_at", None)),
+        "locked_at": attempt.locked_at.isoformat() + "Z" if getattr(attempt, "locked_at", None) else None,
+        "lock_reason": getattr(attempt, "lock_reason", None),
+        "lock_event_id": getattr(attempt, "lock_event_id", None),
+        "current_question_index": getattr(attempt, "current_question_index", None),
+        "expires_at": attempt.expires_at.isoformat() + "Z" if attempt.expires_at else None,
     }
 
 
@@ -250,9 +281,14 @@ def require_active_session(
     assessment: Assessment,
     *,
     session_token: Optional[str] = None,
+    allow_locked: bool = False,
 ) -> None:
     """Reject cross-session / finalized writes."""
-    if attempt.status != "in_progress":
+    if attempt.status == "locked" and allow_locked:
+        pass
+    elif attempt.status != "in_progress":
+        if attempt.status == "locked":
+            raise LMSValidationError("This examination is locked. Wait for your teacher to unlock it.")
         raise LMSValidationError("This examination attempt is no longer active.")
     if session_token and attempt.session_token and not hmac.compare_digest(
         str(attempt.session_token), str(session_token)
@@ -265,6 +301,24 @@ def require_active_session(
             verified=True,
         )
         raise LMSValidationError("Examination session conflict. Re-open the exam from your class page.")
+
+
+def assert_attempt_writable(attempt: AssessmentAttempt) -> None:
+    """Backend fail-closed gate for answer/submit while locked or finalized."""
+    if attempt.status == "locked":
+        raise LMSValidationError("This examination is locked. Wait for your teacher to unlock it.")
+    if attempt.status != "in_progress":
+        raise LMSValidationError("This examination attempt is no longer active.")
+
+
+def teacher_may_manage_attempt(teacher_id: int, attempt: AssessmentAttempt, *, role: str = "teacher") -> bool:
+    if role == "admin":
+        return True
+    db = get_db()
+    assessment = db.query(Assessment).filter(Assessment.id == attempt.assessment_id).first()
+    if not assessment:
+        return False
+    return int(assessment.created_by or 0) == int(teacher_id)
 
 
 def authorize_start(
@@ -291,6 +345,7 @@ def record_event(
     message: Optional[str] = None,
     context: Optional[dict] = None,
     verified: bool = False,
+    trigger_strict_lock: bool = True,
 ) -> ExamSecurityEvent:
     et = event_type if event_type in EVENT_TYPES else "other"
     sev = severity if severity in ("info", "warn", "high", "critical") else "info"
@@ -306,6 +361,12 @@ def record_event(
         ua = (request.headers.get("User-Agent") or "")[:180]
         if ua:
             ctx.setdefault("ua", ua)
+    q_idx = ctx.get("current_question_index")
+    if q_idx is not None:
+        try:
+            attempt.current_question_index = max(0, int(q_idx))
+        except (TypeError, ValueError):
+            pass
     row = ExamSecurityEvent(
         attempt_id=attempt.id,
         student_id=attempt.student_id,
@@ -318,12 +379,236 @@ def record_event(
     )
     db = get_db()
     db.add(row)
+    db.flush()
     attempt.last_security_event_at = datetime.utcnow()
     if et in ("tab_hidden", "window_blur", "focus_loss", "fullscreen_exit"):
         attempt.focus_loss_count = int(attempt.focus_loss_count or 0) + 1
         attempt.interruption_count = int(attempt.interruption_count or 0) + 1
     db.commit()
+
+    locked_now = False
+    already_locked = attempt.status == "locked"
+    if (
+        trigger_strict_lock
+        and not already_locked
+        and attempt.status == "in_progress"
+        and et in STRICT_LOCK_EVENTS
+    ):
+        assessment = db.query(Assessment).filter(Assessment.id == attempt.assessment_id).first()
+        if assessment and policy_for(assessment).get("lock_on_leave"):
+            locked_now = bool(lock_attempt(attempt, reason=et, event_id=row.id, message=message))
+    row._strict_locked = locked_now  # type: ignore[attr-defined]
+    row._already_locked = already_locked  # type: ignore[attr-defined]
     return row
+
+
+def lock_attempt(
+    attempt: AssessmentAttempt,
+    *,
+    reason: str,
+    event_id: Optional[int] = None,
+    message: Optional[str] = None,
+) -> bool:
+    """Atomically lock an in-progress attempt. Idempotent if already locked."""
+    db = get_db()
+    db.refresh(attempt)
+    if attempt.status == "locked":
+        return False
+    if attempt.status != "in_progress":
+        return False
+    attempt.status = "locked"
+    attempt.locked_at = datetime.utcnow()
+    attempt.lock_reason = (reason or "unknown")[:128]
+    if event_id is not None:
+        attempt.lock_event_id = int(event_id)
+    lock_row = ExamSecurityEvent(
+        attempt_id=attempt.id,
+        student_id=attempt.student_id,
+        assessment_id=attempt.assessment_id,
+        event_type="exam_locked",
+        severity="high",
+        verified=False,
+        message=(message or f"Exam locked: {reason}")[:512],
+        context_json=json.dumps(
+            {"reason": reason, "source_event_id": event_id},
+            default=str,
+        )[:4000],
+    )
+    db.add(lock_row)
+    attempt.last_security_event_at = datetime.utcnow()
+    db.commit()
+    logger.info("Attempt %s locked reason=%s", attempt.id, reason)
+    return True
+
+
+def unlock_attempt(
+    attempt: AssessmentAttempt,
+    *,
+    teacher_id: int,
+    message: Optional[str] = None,
+) -> AssessmentAttempt:
+    """Teacher unlock — same attempt, timer unchanged, answers preserved."""
+    db = get_db()
+    if attempt.status == "submitted":
+        raise LMSValidationError("Cannot unlock a submitted attempt.")
+    if attempt.status == "abandoned":
+        raise LMSValidationError("Cannot unlock an abandoned attempt.")
+    if attempt.status != "locked":
+        # Idempotent unlock of already-active attempt.
+        if attempt.status == "in_progress":
+            return attempt
+        raise LMSValidationError("Attempt is not locked.")
+    attempt.status = "in_progress"
+    attempt.locked_at = None
+    attempt.lock_reason = None
+    # Keep lock_event_id for history; rotate session so stale clients re-sync.
+    attempt.session_token = new_session_token()
+    ctx = json.dumps({"teacher_id": teacher_id, "action": "unlock"}, default=str)[:4000]
+    db.add(
+        ExamSecurityEvent(
+            attempt_id=attempt.id,
+            student_id=attempt.student_id,
+            assessment_id=attempt.assessment_id,
+            event_type="exam_unlocked",
+            severity="info",
+            verified=True,
+            message=(message or "Teacher unlocked exam")[:512],
+            context_json=ctx,
+        )
+    )
+    db.add(
+        ExamSecurityEvent(
+            attempt_id=attempt.id,
+            student_id=attempt.student_id,
+            assessment_id=attempt.assessment_id,
+            event_type="invigilator_override",
+            severity="info",
+            verified=True,
+            message="Teacher unlock & resume",
+            context_json=ctx,
+        )
+    )
+    attempt.last_security_event_at = datetime.utcnow()
+    db.commit()
+    db.refresh(attempt)
+    return attempt
+
+
+def extend_attempt_time(
+    attempt: AssessmentAttempt,
+    *,
+    teacher_id: int,
+    seconds: int,
+    reason: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+) -> dict[str, Any]:
+    """Add seconds to expires_at. Timer never pauses on lock; this is explicit teacher grant."""
+    if attempt.status not in ACTIVE_ATTEMPT_STATUSES:
+        raise LMSValidationError("Can only extend time for an active or locked attempt.")
+    secs = int(seconds)
+    if secs < 1 or secs > 7200:
+        raise LMSValidationError("Extension must be between 1 and 7200 seconds.")
+    db = get_db()
+    key = (idempotency_key or "").strip()[:64] or None
+    if key:
+        existing = (
+            db.query(AttemptTimeExtension)
+            .filter(
+                AttemptTimeExtension.attempt_id == attempt.id,
+                AttemptTimeExtension.idempotency_key == key,
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "extended": False,
+                "duplicate": True,
+                "seconds": existing.seconds,
+                "expires_at": existing.new_expires_at.isoformat() + "Z"
+                if existing.new_expires_at
+                else None,
+            }
+    prev = attempt.expires_at
+    base = prev if prev else datetime.utcnow()
+    if base < datetime.utcnow():
+        base = datetime.utcnow()
+    new_exp = base + timedelta(seconds=secs)
+    attempt.expires_at = new_exp
+    row = AttemptTimeExtension(
+        attempt_id=attempt.id,
+        teacher_id=teacher_id,
+        seconds=secs,
+        reason=(reason or "")[:512] or None,
+        idempotency_key=key,
+        previous_expires_at=prev,
+        new_expires_at=new_exp,
+    )
+    db.add(row)
+    db.add(
+        ExamSecurityEvent(
+            attempt_id=attempt.id,
+            student_id=attempt.student_id,
+            assessment_id=attempt.assessment_id,
+            event_type="time_extended",
+            severity="info",
+            verified=True,
+            message=f"Teacher extended time by {secs}s",
+            context_json=json.dumps(
+                {"teacher_id": teacher_id, "seconds": secs, "reason": reason},
+                default=str,
+            )[:4000],
+        )
+    )
+    attempt.last_security_event_at = datetime.utcnow()
+    db.commit()
+    return {
+        "extended": True,
+        "duplicate": False,
+        "seconds": secs,
+        "expires_at": new_exp.isoformat() + "Z",
+        "previous_expires_at": prev.isoformat() + "Z" if prev else None,
+    }
+
+
+def list_live_security_for_assessment(assessment_id: int) -> list[dict[str, Any]]:
+    """Active/locked attempts for teacher live panel."""
+    from app.models.database_models import User
+
+    db = get_db()
+    rows = (
+        db.query(AssessmentAttempt, User)
+        .outerjoin(User, User.id == AssessmentAttempt.student_id)
+        .filter(
+            AssessmentAttempt.assessment_id == assessment_id,
+            AssessmentAttempt.status.in_(tuple(ACTIVE_ATTEMPT_STATUSES)),
+        )
+        .order_by(AssessmentAttempt.id.desc())
+        .all()
+    )
+    out = []
+    for attempt, user in rows:
+        out.append(
+            {
+                "attempt_id": attempt.id,
+                "student_id": attempt.student_id,
+                "student_name": (user.full_name if user else None) or (user.username if user else None),
+                "status": attempt.status,
+                "is_locked": attempt.status == "locked",
+                "lock_reason": attempt.lock_reason,
+                "locked_at": attempt.locked_at.isoformat() + "Z" if attempt.locked_at else None,
+                "current_question_index": attempt.current_question_index,
+                "interruption_count": int(attempt.interruption_count or 0),
+                "focus_loss_count": int(attempt.focus_loss_count or 0),
+                "expires_at": attempt.expires_at.isoformat() + "Z" if attempt.expires_at else None,
+                "last_security_event_at": (
+                    attempt.last_security_event_at.isoformat() + "Z"
+                    if attempt.last_security_event_at
+                    else None
+                ),
+                "started_at": attempt.started_at.isoformat() + "Z" if attempt.started_at else None,
+            }
+        )
+    return out
 
 
 def list_events_for_attempt(attempt_id: int, limit: int = 200) -> list[dict]:
@@ -406,7 +691,9 @@ def update_security_settings(assessment: Assessment, body: dict, *, actor_id: in
         if mode in _LEGACY_SEB_MODES:
             mode = "standard"
         if mode not in SECURITY_MODES:
-            raise LMSValidationError("security_mode must be standard or supervised (in-app only; SEB removed)")
+            raise LMSValidationError(
+                "security_mode must be standard, supervised, or strict (in-app only)"
+            )
         assessment.security_mode = mode
     # Always clear third-party SEB requirement.
     assessment.require_seb = False
