@@ -638,6 +638,9 @@
       var body = new URLSearchParams();
       body.set('useremail', email);
       body.set('password', password);
+      var remember = !!(rememberBox && rememberBox.checked);
+      body.set('remember', remember ? '1' : '0');
+      try { localStorage.setItem(REMEMBER_KEY, remember ? '1' : '0'); } catch (e) { /* private mode */ }
 
       var response = await fetch("{{ url_for('auth.login') }}", {
         method: 'POST',
@@ -655,6 +658,7 @@
       if (contentType.includes('application/json')) {
         var data = await response.json().catch(function () { return {}; });
         if (response.ok && data.success) {
+          if (remember) await storeCredential(email, password);
           window.location.replace(data.redirect_url || '/admin/');
           return;
         }
@@ -691,6 +695,63 @@
   document.getElementById('password').addEventListener('input', function () {
     if (this.value.length === 0) setFieldError('password', 'password-error', false);
   });
+
+  /* ── Remember this device / shared computers (DIL feedback 17-11-2026) ──
+     Teachers share school computers. The browser filled one teacher's saved
+     password (Nimra) while another teacher (Asma) typed her own email, and the
+     form's fetch() submit never told the browser which email a password belongs
+     to. Now:
+       * a password is only kept for the email it was entered/filled for - when
+         the email changes to another account, the stale password is cleared;
+       * "Remember this device" stores the credential under that exact email
+         (Credential Management API) and keeps the session after the browser
+         closes; unchecked = nothing is stored and the session ends with the
+         browser. Passwords are never written to localStorage. */
+  var REMEMBER_KEY = 'iqbalai_remember_device';
+  var rememberBox = document.getElementById('remember');
+  try { if (rememberBox && localStorage.getItem(REMEMBER_KEY) === '1') rememberBox.checked = true; } catch (e) { /* ignore */ }
+
+  function accountKey(v) { return String(v || '').trim().toLowerCase(); }
+  var emailInput = document.getElementById('email');
+  var passwordInput = document.getElementById('password');
+  var passwordOwner = null;   // email a browser-filled password was filled for
+  var passwordTyped = false;  // typed/pasted by the person at the keyboard
+  passwordInput.addEventListener('input', function (e) {
+    // Typing/pasting is an InputEvent with an inputType; browser autofill is not.
+    passwordTyped = !!(e && e.inputType) && !!this.value;
+    // Autofill may set the password just before the email: read the email after it.
+    setTimeout(function () {
+      passwordOwner = passwordInput.value ? accountKey(emailInput.value) : null;
+    }, 0);
+  });
+  function dropForeignPassword() {
+    if (!passwordInput.value || passwordTyped) return;  // their own typing is never cleared
+    // A browser-filled password (also one filled before any event reached us,
+    // owner === null) only stays for the exact email it was filled for.
+    if (passwordOwner !== accountKey(emailInput.value)) {
+      passwordInput.value = '';
+      passwordOwner = null;
+      setFieldError('password', 'password-error', false);
+    }
+  }
+  var dropTimer = null;
+  function scheduleDrop() {  // after an autofill that sets email + password together
+    clearTimeout(dropTimer);
+    dropTimer = setTimeout(dropForeignPassword, 60);
+  }
+  emailInput.addEventListener('input', scheduleDrop);
+  emailInput.addEventListener('change', scheduleDrop);
+
+  async function storeCredential(email, password) {
+    if (!window.PasswordCredential || !navigator.credentials || !navigator.credentials.store) return;
+    try {
+      var cred = new PasswordCredential({ id: email, password: password, name: email });
+      await Promise.race([
+        navigator.credentials.store(cred),
+        new Promise(function (resolve) { setTimeout(resolve, 1500); })
+      ]);
+    } catch (e) { /* the browser may refuse - login still works */ }
+  }
 </script>
 
 </body>

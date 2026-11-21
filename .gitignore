@@ -102,3 +102,5 @@ Math IX (1) (1).pdf
 Students and Teachers for DIL SAATHI.xlsx
 _qa_audit_tmp/dil_saathi_users.json
 _qa_audit_tmp/dil_saathi_class_mapping.json
+!tests/test_dil_feedback_20261117.py
+!tests/test_ai_guided_practice.py

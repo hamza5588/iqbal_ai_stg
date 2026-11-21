@@ -714,10 +714,34 @@
     return /^\s*\d+(?:\s+\d+\s*\/\s*\d+)?\s*%\s*$/.test(String(s || ''));
   }
 
+  // Urdu / Arabic-script words. DIL 17-11-2026: an Urdu tutor reply has no Latin
+  // words, so it was not "prose" and the WHOLE reply was wrapped as one math span -
+  // MathJax dropped every space and the bubble scrolled sideways.
+  var _ARABIC_WORD_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]{2,}/g;
+  var _ARABIC_CHAR_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
+  function lmsHasArabicScript(s) { return _ARABIC_CHAR_RE.test(String(s || '')); }
+  function lmsIsRtlText(s) {
+    s = String(s || '');
+    var ar = (s.match(/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/g) || []).length;
+    var lat = (s.replace(/\\[A-Za-z]+/g, '').match(/[A-Za-z]/g) || []).length;
+    return ar >= 3 && ar > lat;
+  }
+  global.lmsIsRtlText = lmsIsRtlText;
+
+  /** Math spans must never hold Urdu words: unwrap those spans back to text. */
+  function lmsUnwrapArabicMath(s) {
+    return String(s || '').replace(/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$([^$\n]+)\$/g, function (m, a, b, c, d) {
+      var body = a != null ? a : (b != null ? b : (c != null ? c : d));
+      if (!_ARABIC_CHAR_RE.test(body || '')) return m;
+      return String(body).replace(/\\text\{([^{}]*)\}/g, '$1');
+    });
+  }
+
   function lmsLooksLikeProse(s) {
     var words = lmsUnsquashEnglish(String(s || '')).match(/[A-Za-z]{4,}/g) || [];
     var real = words.filter(function (w) { return !_MATH_WORD_RE.test(w); });
-    return real.length >= 3;
+    var arabic = String(s || '').match(_ARABIC_WORD_RE) || [];
+    return real.length + arabic.length >= 3 || arabic.length >= 1;
   }
 
   function lmsLooksLikeMixedTextAndMath(s) {
@@ -1277,6 +1301,14 @@
     // Repair BEFORE trim(): see lmsRecoverLatex for why the order matters.
     var s = lmsRecoverEatenBackslashCommands(String(text)).trim();
     if (!s) return '';
+    if (lmsHasArabicScript(s)) {
+      // Urdu (or mixed Urdu + maths): always prose. Only the maths islands are typeset
+      // ("a³ + b³ کا مطلب" -> "$a^{3} + b^{3}$ کا مطلب"), never the Urdu words.
+      var ur = lmsUnicodeSupersToLatex(lmsUnwrapArabicMath(s)).replace(/−/g, '-');
+      ur = lmsStripInnerMathDelims(ur);
+      ur = ur.replace(/\^\s*(\d{2,})(?![\d.])/g, '^{$1}');
+      return lmsInlineParenToDollar(lmsJoinTimesBetweenMath(lmsWrapMathIslands(ur, true)));
+    }
     s = lmsUnwrapOuterMathIfProse(lmsUnsquashEnglish(s));
     s = lmsLiftInstructionOutOfMath(s);
     s = lmsStripInnerMathDelims(lmsNormalizeMixedPercents(s));
@@ -1386,11 +1418,13 @@
     } else {
       html = (typeof global.escapeHtml === 'function' ? global.escapeHtml(text) : String(text || '')).replace(/\n/g, '<br>');
     }
+    // Urdu replies read right-to-left; maths islands inside stay left-to-right (CSS).
+    var rtl = lmsIsRtlText(raw) ? ' dir="rtl" lang="ur"' : '';
     if (opts.inline) {
       html = html.replace(/^<p>([\s\S]*)<\/p>$/i, '$1');
-      return '<span class="lms-math-content lms-math-inline tex2jax_process">' + html + '</span>';
+      return '<span class="lms-math-content lms-math-inline tex2jax_process"' + rtl + '>' + html + '</span>';
     }
-    return '<div class="lms-math-content tex2jax_process">' + html + '</div>';
+    return '<div class="lms-math-content tex2jax_process' + (rtl ? ' lms-rtl' : '') + '"' + rtl + '>' + html + '</div>';
   };
   global.lmsFormatRichText = formatRichText;
 

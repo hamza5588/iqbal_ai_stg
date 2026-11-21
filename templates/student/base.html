@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   {# Lesson content / lesson chat formatting pipeline (same as the old student page). #}
-  <script src="{{ url_for('static', filename='teacher/js/chat-response-formatter.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/chat-response-formatter.js') }}?v=20261122dollar1"></script>
   <script src="{{ url_for('static', filename='teacher/js/markdown-parser.js') }}"></script>
   <script src="{{ url_for('static', filename='teacher/js/backend-formatter.js') }}"></script>
   <script src="{{ url_for('static', filename='teacher/js/markdown-examples.js') }}"></script>
@@ -29,7 +29,7 @@
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}?v=20261121ur1">
   <link rel="stylesheet" href="{{ url_for('static', filename='student/css/student-dashboard.css') }}">
 
   <!-- MathJax v3: TeX delimiters, skip code blocks, no automatic typeset -->
@@ -93,7 +93,7 @@
 
   {# Order: shell helpers (escapeHtml, toasts) → shared LMS core/panels → student LMS flows → screen modules. #}
   <script src="{{ url_for('static', filename='student/js/student-shell.js') }}?v=20261113qa1"></script>
-  <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261116fmt1"></script>
+  <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261121ur1"></script>
   <script src="{{ url_for('static', filename='lms/lms-exam-security.js') }}?v=20261121strict3"></script>
   <script src="{{ url_for('static', filename='lms/lms-panels.js') }}?v=20261109qtime1"></script>
   <script src="{{ url_for('static', filename='lms/lms-student.js') }}?v=20261109qtime1"></script>
@@ -103,7 +103,7 @@
   <script src="{{ url_for('static', filename='student/js/student-diagnostic.js') }}"></script>
   <script src="{{ url_for('static', filename='student/js/student-learning-path.js') }}?v=20261112aigp1"></script>
   <script src="{{ url_for('static', filename='student/js/student-classes.js') }}"></script>
-  <script src="{{ url_for('static', filename='student/js/student-ai-guided-practice.js') }}?v=20261116retry1"></script>
+  <script src="{{ url_for('static', filename='student/js/student-ai-guided-practice.js') }}?v=20261121bank1"></script>
   <script src="{{ url_for('static', filename='student/js/student-tutor.js') }}"></script>
   <script src="{{ url_for('static', filename='student/js/tutor-usage.js') }}?v=20261022usage1"></script>
   {% block scripts %}{% endblock %}

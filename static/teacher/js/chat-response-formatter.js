@@ -139,7 +139,11 @@
   function _isInsideMathDelim(before) {
     var opens = (before.match(/\\\(/g) || []).length + (before.match(/\\\[/g) || []).length;
     var closes = (before.match(/\\\)/g) || []).length + (before.match(/\\\]/g) || []).length;
-    return opens > closes;
+    if (opens > closes) return true;
+    // Inside "$ ... $" too: "$(x - \frac{1}{x})^2$" became "$\(x - ...\)^2$" (raw red \( in
+    // the AIGP tutor bubble, DIL feedback 17-11-2026). Count single $ outside $$ pairs.
+    var dollars = (before.replace(/\$\$/g, '').match(/(?<!\\)\$/g) || []).length;
+    return dollars % 2 === 1;
   }
 
   function convertBareBracketMathToLatex(str) {
