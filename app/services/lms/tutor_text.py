@@ -388,3 +388,21 @@ ANSWER_GUARD_REPLIES = {
 def answer_guard_reply(message: Optional[str], history: Optional[Iterable[Dict[str, str]]] = None) -> str:
     """The last-resort "won't name the answer" reply, in the student's language."""
     return ANSWER_GUARD_REPLIES[reply_language(message, history)]
+
+
+_REFUSAL_RE = re.compile(
+    r"^\W*(?:i['’]?m\s+sorry|i\s+am\s+sorry|sorry|unfortunately|i\s+(?:can['’]?t|cannot|won['’]?t|am\s+unable|'m\s+unable)"
+    r"|معذرت|معاف\s+کیجیے|میں\s+یہ\s+نہیں)",
+    re.I,
+)
+
+
+def is_bare_refusal(text: Optional[str]) -> bool:
+    """A short reply that only refuses ("I'm sorry, but I can't provide that.") with no help in it."""
+    t = (text or "").strip()
+    if not t or len(t) > 160:
+        return False
+    if not _REFUSAL_RE.search(t):
+        return False
+    # a refusal that also carries a hint (maths, a question back, "hint") is fine
+    return not re.search(r"\\\(|\^|=|\bhint\b|\btry\b|\bthink\b|\?|؟|اشارہ", t, re.I)

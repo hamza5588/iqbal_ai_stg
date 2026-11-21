@@ -348,3 +348,28 @@ def test_numeric_key_stated_as_result_is_a_leak(reply):
 ])
 def test_numeric_hints_are_not_leaks(reply):
     assert not TT.reveals_option_math(reply, NUM_OPTS, 2, NUM_STEM)
+
+
+@pytest.mark.parametrize("text,bare", [
+    ("I’m sorry, but I can’t provide that.", True),
+    ("I'm sorry, but I can't share that.", True),
+    (r"I can't give the answer directly, but here's a hint: rewrite it as \(3^4 = x\).", False),
+    ("Sorry! Think about what (a + b) times itself gives?", False),
+    ("معذرت، میں یہ نہیں بتا سکتا۔", True),
+    ("Great job! Yes - B is right.", False),
+])
+def test_bare_refusal_detection(text, bare):
+    assert TT.is_bare_refusal(text) is bare
+
+
+def test_bare_refusal_is_rewritten_into_help(monkeypatch):
+    out, llm, _ = _run(monkeypatch, ["I’m sorry, but I can’t provide that.",
+                                     r"Try writing \(\log_3 x = 4\) as a power of 3. What do you get?"],
+                       message="Please explain this in Urdu")
+    assert len(llm.calls) == 2 and "power of 3" in out
+
+
+def test_repeated_bare_refusal_becomes_a_nudge_in_the_students_language(monkeypatch):
+    out, _, _ = _run(monkeypatch, ["I’m sorry, but I can’t provide that.", "I’m sorry, but I can’t."],
+                     message="Please explain this in Urdu")
+    assert out == TT.ANSWER_GUARD_REPLIES["urdu"]
