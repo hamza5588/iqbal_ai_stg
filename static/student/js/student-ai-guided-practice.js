@@ -252,7 +252,8 @@
   function renderUnavailable(data) {
     var body = sessionBody();
     if (!body) return;
-    var title = data.reason === 'insufficient_content' ? 'Not enough content in the PDF' : 'Questions are not ready';
+    var title = data.reason === 'insufficient_content' ? 'Not enough content in the PDF' :
+      (data.reason === 'no_bank_questions' ? 'No questions in the question bank yet' : 'Questions are not ready');
     body.innerHTML = '<div class="sd-split-left" style="border:0;">' +
       stateCard(data.reason === 'insufficient_content' ? 'fa-file-alt' : 'fa-exclamation-triangle', title, data.message || 'Please try again later.',
         '<button type="button" class="sd-btn sd-btn-primary" style="margin-top:12px;" onclick="sdAigpCloseSession()">Back to topics</button>') +
@@ -303,6 +304,13 @@
     return '';
   }
 
+  function sourceNote(d) {
+    var file = d.pdf_filename ? ' (' + esc(d.pdf_filename) + ')' : '';
+    if (d.question_source === 'bank') return 'All questions are taken from your teacher\'s question bank' + file + '.';
+    if (d.question_source === 'mixed') return 'Questions from your teacher\'s question bank' + file + ', plus practice questions based on it.';
+    return 'Practice questions made from your teacher\'s Target PDF' + file + '.';
+  }
+
   function renderSession() {
     var d = sess.data;
     var body = sessionBody();
@@ -333,7 +341,7 @@
       ' &nbsp;•&nbsp; <b style="color:var(--sd-blue-700);">' + esc(d.main_topic_title || '') + '</b>' +
       (d.is_whole_section ? '' : ' &rsaquo; <b>' + esc(d.subtopic_title || '') + '</b>') +
       ' &nbsp;•&nbsp; ' + (d.correct_count || 0) + ' correct</p>' +
-      '<p class="sd-desc" style="font-size:12.5px;">Questions generated only from your teacher\'s Target PDF' + (d.pdf_filename ? ' (' + esc(d.pdf_filename) + ')' : '') + '.</p>' +
+      '<p class="sd-desc" style="font-size:12.5px;">' + sourceNote(d) + '</p>' +
       '<div class="sd-q-box">' +
       '<div class="sd-q-text lms-quiz-stem">' + (item.render_html ? (item.question_render || esc(item.question_text)) : rich(item.question_render || item.question_text, false)) + '</div>' +
       item.options.map(function (o) { return optionHtml(item, o); }).join('') +
@@ -362,12 +370,14 @@
     ['Break into steps', 'Break it into small steps'],
     ['Give a hint', 'Give me a hint'],
     ['Show example', 'Show me a similar example for this question'],
-    ["I don't understand", "I still don't understand"]
+    ["I don't understand", "I still don't understand"],
+    ['اردو میں', 'Please explain this in Urdu']
   ];
   var TUTOR_ANSWERED_PROMPTS = [
     ['Explain again', 'Explain the complete solution again'],
     ['Why not others?', 'Why are the other options wrong?'],
-    ['Key rule', 'What key rule did I use here?']
+    ['Key rule', 'What key rule did I use here?'],
+    ['اردو میں', 'Please explain this in Urdu']
   ];
   var MODE_B_KICKOFF = 'Why is my answer correct?';
   sess.tutorLoading = {};
@@ -387,7 +397,7 @@
     var html = msgs.length ? msgs.map(function (m) {
       var user = m.role === 'user';
       return '<div class="sd-ai-bubble' + (user ? ' user' : '') + '"><div class="sd-bot-ic">' + (user ? 'You' : 'AI') + '</div>' +
-        '<div class="sd-msg">' + (user ? esc(m.content) : botHtml(m.content)) +
+        '<div class="sd-msg"' + (user ? ' dir="auto"' : '') + '>' + (user ? esc(m.content) : botHtml(m.content)) +
         (m.failed ? '<div class="sd-msg-tools"><button type="button" onclick="sdAigpTutorRetry(' + item.position + ')">Try again</button></div>' : '') +
         '</div></div>';
     }).join('') : '<div class="sd-ai-bubble"><div class="sd-bot-ic">AI</div><div class="sd-msg">' + esc(greeting) + '</div></div>';
@@ -402,7 +412,7 @@
     return '<div class="sd-chat-scroll" id="sdAigpTutorMessages">' + html + '</div>' +
       '<div class="sd-chip-row" id="sdAigpTutorPrompts">' + prompts + '</div>' +
       '<div class="sd-chat-inputbar"><div class="sd-chat-field">' +
-      '<textarea id="sdAigpTutorInput" rows="1" maxlength="1000" placeholder="' +
+      '<textarea id="sdAigpTutorInput" rows="1" maxlength="1000" dir="auto" placeholder="' +
       (item.solved ? 'Ask about this question...' : "I'm stuck on this step... (Enter to send)") + '"' + dis + '>' +
       esc(sess.drafts[item.position] || '') + '</textarea>' +
       '<button type="button" class="sd-field-ic bulb" title="Need more help" aria-label="Need more help" data-prompt="I still need help with this question."' + dis + '><i class="far fa-lightbulb"></i></button>' +

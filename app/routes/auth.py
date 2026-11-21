@@ -322,7 +322,10 @@ def login():
                 session['full_name'] = user.get('full_name') or user['username']
                 session['role'] = user.get('role', 'student')  # Store role in session
                 session['groq_api_key'] = user.get('groq_api_key', '')  # Default to empty string if not present
-                session.permanent = True  # Make session permanent for 24 hours
+                # "Remember this device": keep the 24h session after the browser closes.
+                # Unticked (shared school computers) = the session ends with the browser.
+                # Clients that do not send the field keep the old 24h behaviour.
+                session.permanent = (request.form.get('remember') or '1').strip() != '0'
 
                 # Compute canonical role-based landing route once
                 redirect_path = get_default_route_by_role(user.get('role'))

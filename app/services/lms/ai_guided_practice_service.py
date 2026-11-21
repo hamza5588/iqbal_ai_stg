@@ -188,11 +188,25 @@ def _bank_document(version: AIGPPdfVersion):
     return q.filter(TargetBankDocument.grade_level == version.grade_level).order_by(TargetBankDocument.id.desc()).first()
 
 
+def is_bank_topic(version: Optional[AIGPPdfVersion], sub: Optional[AIGPTopic]) -> bool:
+    """Question-bank PDF subtopic: practice is served ONLY from the printed,
+    admin-approved questions (DIL feedback 17-11-2026: 8/10 questions of a
+    question-bank topic were AI-generated although the page promised the bank)."""
+    if version is None or sub is None or sub.title_source != "labelled":
+        return False
+    try:
+        return _bank_document(version) is not None
+    except Exception:  # noqa: BLE001 - bank tables missing on very old databases
+        return False
+
+
 def seed_bank_questions(version: AIGPPdfVersion, main: AIGPTopic, sub: AIGPTopic) -> int:
     """Add this subtopic's admin-APPROVED printed questions to its pool (no LLM).
 
     Only for question-bank PDFs (subtopics from Domain/Topic labels): the printed
-    item numbers under this label are matched to approved Target-bank items.
+    item numbers under this exact label are matched to approved Target-bank items.
+    Never items of another label and never AI-made ones: a label with 2 printed
+    questions gives a 2-question session.
     """
     if sub.title_source != "labelled":
         return 0
@@ -1133,6 +1147,9 @@ def ensure_pool(sub_id: int, target_size: int) -> dict:
         raise LMSNotFoundError("Subtopic not found")
     if sub.pool_exhausted or sub.insufficient_content:
         return {"generated": 0, "error": None, "waited": False}
+    version_row = db.query(AIGPPdfVersion).filter(AIGPPdfVersion.id == sub.version_id).first()
+    if is_bank_topic(version_row, sub):  # question bank: never generate, only printed items
+        return {"generated": 0, "error": None, "waited": False}
     target_size = min(int(target_size), POOL_CAP)
     if len(_valid_pool(sub.id)) >= target_size:
         return {"generated": 0, "error": None, "waited": False}
@@ -1356,16 +1373,30 @@ def start_session(student_id: int, subtopic_id: int, request_key: Optional[str] 
     except Exception as exc:  # noqa: BLE001 - generation still works without the bank
         logger.warning("Target-bank seeding failed for subtopic %s: %s", sub.id, exc)
         db.rollback()
+    bank_only = is_bank_topic(version, sub)
     pool = _valid_pool(sub.id)
+    if bank_only:
+        # Earlier AI-generated questions of this subtopic stay stored for history
+        # but are no longer served.
+        pool = [q for q in pool if q.bank_question_id]
     unseen = sum(1 for q in pool if q.id not in history)
     gen_error = None
-    if unseen < n and not sub.pool_exhausted and not sub.insufficient_content:
+    if not bank_only and unseen < n and not sub.pool_exhausted and not sub.insufficient_content:
         result = ensure_pool(sub.id, len(pool) + (n - unseen))
         gen_error = result.get("error")
         db.expire_all()
         sub = db.query(AIGPTopic).filter(AIGPTopic.id == subtopic_id).first()
         pool = _valid_pool(sub.id)
     if not pool:
+        if bank_only:
+            return {
+                "session": None,
+                "reason": "no_bank_questions",
+                "message": (
+                    "Your teacher's question bank has no approved questions for this topic yet. "
+                    "Please choose another topic."
+                ),
+            }
         if sub.insufficient_content:
             reason, message = "insufficient_content", (
                 "The Target PDF does not contain enough material on this subtopic to build practice questions."
@@ -1448,7 +1479,7 @@ def start_session(student_id: int, subtopic_id: int, request_key: Optional[str] 
         return state
 
     remaining_unseen = sum(1 for q in pool if q.id not in history and q.id not in set(picked))
-    if remaining_unseen < n and not sub.pool_exhausted:
+    if remaining_unseen < n and not sub.pool_exhausted and not bank_only:
         try:
             from app.tasks import lms_tasks
 
@@ -1590,6 +1621,12 @@ def session_state(student_id: int, session_id: int) -> dict:
         "status": s.status,
         "version_id": s.version_id,
         "pdf_filename": version.original_filename if version else None,
+        # "bank": every question is printed in the teacher's question bank;
+        # "mixed": an older session that still holds AI-made questions; "pdf": generated.
+        "question_source": (
+            ("bank" if all(views[r.id].bank for _, r in items) else "mixed")
+            if is_bank_topic(version, sub) else "pdf"
+        ),
         "subtopic_id": s.topic_id,
         "subtopic_title": sub.title if sub else None,
         "main_topic_title": main.title if main else None,
@@ -1835,8 +1872,12 @@ def _tutor_messages(session_id: int, position: Optional[int] = None) -> Dict[int
     if position is not None:
         q = q.filter(AIGPTutorMessage.position == position)
     out: Dict[int, List[dict]] = {}
+    from app.services.lms.tutor_text import tidy_reply
+
     for m in q.order_by(AIGPTutorMessage.id).all():
-        out.setdefault(m.position, []).append({"role": m.role, "content": m.content})
+        # Replies stored before the clean-up existed get the same tidy-up on display.
+        content = tidy_reply(m.content) if m.role == "assistant" else m.content
+        out.setdefault(m.position, []).append({"role": m.role, "content": content})
     return out
 
 
@@ -1865,7 +1906,8 @@ def tutor_reply(student_id: int, session_id: int, position: int, message: str, a
     """
     from app.models.lms_models import AIGPTutorMessage
     from app.services.lms import tutor_service
-    from app.services.lms.deficiency_chat_service import _ANSWER_GUARD_REPLY, _reveals_current_mcq_answer
+    from app.services.lms import tutor_text
+    from app.services.lms.deficiency_chat_service import _reveals_current_mcq_answer
 
     message = (message or "").strip()
     if not message:
@@ -1919,6 +1961,7 @@ def tutor_reply(student_id: int, session_id: int, position: int, message: str, a
         prior_turns=sum(1 for m in history if m["role"] == "assistant"),
         message=message,
         solved=answered,
+        history=history,
     )
     if answered_wrong:
         # Live QA: the solved-mode rules made the tutor praise a WRONG pick ("Yes - C is right").
@@ -1944,11 +1987,11 @@ def tutor_reply(student_id: int, session_id: int, position: int, message: str, a
             logger.warning("Tutor leak-rewrite failed: %s", exc)
             reply = ""
         if not (reply or "").strip() or _reveals_current_mcq_answer(reply, current_q):
-            reply = _ANSWER_GUARD_REPLY
+            reply = tutor_text.answer_guard_reply(message, history)
     cleaned = (reply or "").strip()
     if cleaned.startswith(tutor_service.DEFICIENCY_OFF_TOPIC_TAG):
         cleaned = cleaned[len(tutor_service.DEFICIENCY_OFF_TOPIC_TAG):].strip() or tutor_service.DEFICIENCY_OFF_TOPIC_REFUSE
-    reply = cleaned or _ANSWER_GUARD_REPLY
+    reply = cleaned or tutor_text.answer_guard_reply(message, history)
     db.add(AIGPTutorMessage(session_id=session.id, position=item.position, role="user", content=message))
     db.add(AIGPTutorMessage(session_id=session.id, position=item.position, role="assistant", content=reply))
     db.commit()

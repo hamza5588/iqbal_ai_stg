@@ -1619,3 +1619,10 @@ html.lms-no-copy-assess .lms-diag-surface {
   -webkit-user-select: none !important;
   user-select: none !important;
 }
+
+/* Urdu tutor replies (DIL feedback 17-11-2026): right-to-left text, maths stays LTR. */
+.lms-math-content[dir="rtl"] { text-align: right; line-height: 2; }
+.lms-math-content[dir="rtl"] mjx-container,
+.lms-math-content[dir="rtl"] .katex { direction: ltr; unicode-bidi: isolate; }
+.lms-math-content[dir="rtl"] ul,
+.lms-math-content[dir="rtl"] ol { padding-right: 1.4em; padding-left: 0; }

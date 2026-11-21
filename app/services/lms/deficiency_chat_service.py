@@ -2278,7 +2278,7 @@ def _save_tutor_state(session: DeficiencyChatSession, state: dict) -> None:
 
 _ANSWER_GUARD_REPLY = (
     "Let's work it out without naming the answer. "
-    "What rule from the PDF could you use to test your choice?"
+    "Which rule from your book could you use to test your choice?"
 )
 
 
@@ -2312,13 +2312,17 @@ def _reveals_current_mcq_answer(reply: str, current_question: Optional[dict]) ->
     if not text:
         return False
     escaped_text = re.escape(text)
-    return bool(
-        re.search(
-            rf"\b(?:correct\s+answer|answer|result|value)\s*(?:is|:|=)\s*{escaped_text}(?:\b|$)",
-            reply,
-            re.IGNORECASE,
-        )
-    )
+    if re.search(
+        rf"\b(?:correct\s+answer|answer|result|value)\s*(?:is|:|=)\s*{escaped_text}(?:\b|$)",
+        reply,
+        re.IGNORECASE,
+    ):
+        return True
+    # Maths written out in any language/notation (a live Urdu reply built the only
+    # factor that the correct option has: "(a² - ab + b²)").
+    from app.services.lms.tutor_text import reveals_option_math
+
+    return reveals_option_math(reply, options, correct_index, current_question.get("question_text") or "")
 
 
 def explain_with_tutor(
@@ -2392,6 +2396,7 @@ def explain_with_tutor(
         prior_turns=prior_turns,
         message=message,
         solved=solved,
+        history=history,
     )
     reply = tutor_service.tutor_chat(
         message,
@@ -2425,7 +2430,9 @@ def explain_with_tutor(
             logger.warning("Learning Chat leak-rewrite failed for session %s: %s", session_id, exc)
             reply = ""
         if not (reply or "").strip() or _reveals_current_mcq_answer(reply, current_q):
-            reply = _ANSWER_GUARD_REPLY
+            from app.services.lms.tutor_text import answer_guard_reply
+
+            reply = answer_guard_reply(message, history)
 
     off_tag = tutor_service.DEFICIENCY_OFF_TOPIC_TAG
     refuse = tutor_service.DEFICIENCY_OFF_TOPIC_REFUSE

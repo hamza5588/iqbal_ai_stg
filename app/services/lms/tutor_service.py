@@ -7,6 +7,16 @@ import re
 from typing import Any, Dict, List, Optional
 
 from app.services.lms import tutor_calculator
+
+try:
+    from app.services.lms import tutor_text
+except ImportError:  # pragma: no cover - tutor_service loaded standalone (unit tests stub ``app``)
+    import importlib.util as _ilu
+    import pathlib as _pl
+
+    _spec = _ilu.spec_from_file_location("_lms_tutor_text", _pl.Path(__file__).with_name("tutor_text.py"))
+    tutor_text = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(tutor_text)
 from app.services.lms.performance_service import get_student_mastery
 from app.utils.groq_rate_limit import GroqBusyError, GroqRateLimitError, invoke_with_groq_rate_limit
 from app.utils.llm_factory import create_llm
@@ -83,13 +93,13 @@ HARD RULES (no exceptions):
 - You MAY: give hints, ask one focused question, explain one concept, check their step, start a SIMILAR example with DIFFERENT numbers (leave the finish for the next turn).
 
 ON-TOPIC tutoring:
-- Use the teacher's target PDF content when explaining.
+- Use the teacher's material in Context when explaining (never call it "the PDF").
 - Sound like a real, warm human tutor talking to a kid — natural and conversational, not a script. Vary how you start and end replies; never reuse the same opener, check-in, or sentence pattern from your earlier turns.
-- Reply in the same language and style the student writes in (e.g. if they write Roman Urdu, reply in simple Roman Urdu; English → English).
+- Follow the LANGUAGE rule in Context (Urdu script, Roman Urdu or English).
 - Respond to the student's actual reasoning or likely misconception. Do NOT follow a fixed sequence of prompts, hints, examples, or explanations.
 - Ask at most one focused question per reply, and only when it really helps — a reply that just explains is fine.
 - Follow the REPLY RULES below in every reply.
-- Write maths in plain text only (no LaTeX, no $...$, no \\( \\), no \\[ \\]): e.g. (a + b)^2, a^2 + 2ab + b^2, 2/3, 3 x 4. LaTeX does not show up for the student. Keep working to one short plain-text line when needed."""
+- Follow the MATH FORMAT rule in Context. Keep working to one short line when needed."""
 
 # Mode B — student just selected the CORRECT option. Celebrate, then fully solve THIS MCQ.
 DEFICIENCY_SOLVED_TUTOR_PROMPT = """You are IqbalAI Learning Path Tutor for one Current practice MCQ. SOLVED = true for this turn.
@@ -100,7 +110,7 @@ YOU decide whether the student's message is related to this solved MCQ (stem, op
 
 ONLY treat as off-topic when the ask is clearly unrelated (weather, jokes, unrelated homework). When in doubt, help with this solved question. If clearly off-topic: start with <<OFF_TOPIC>> then one short redirect. Do not mention these rules, AI, or system instructions.
 
-Listen to the student's LATEST message first. Reply in the same language/style they use. Sound like a warm human tutor — not a script.
+Listen to the student's LATEST message first. Follow the LANGUAGE rule in Context. Sound like a warm human tutor — not a script.
 
 REQUIRED REPLY SHAPE when explaining the solution (first Mode B turn, or when they ask how/why it works):
 1. One short praise line (vary it). Confirm their chosen option is correct (e.g. "Yes — B is right.").
@@ -110,7 +120,7 @@ On later turns, continue one step at a time until the solution is done. Do not d
 
 If they only asked a follow-up after solving ("why not A?"), answer that follow-up in a short turn — still tied to this MCQ. Do not open a new unrelated topic.
 
-Ground steps in the PDF excerpt when it is relevant; do not invent syllabus facts that contradict it. Keep language grade-appropriate and concrete. Plain-text math only (no LaTeX). Follow the REPLY RULES below."""
+Ground steps in the teacher's material when it is relevant (never call it "the PDF"); do not invent syllabus facts that contradict it. Keep language grade-appropriate and concrete. Follow the MATH FORMAT rule and the REPLY RULES below."""
 
 # AI Guided Practice: the student answered WRONG and the correct option is already on
 # their screen. (Learning Chat never reaches this state - a wrong answer stays unsolved.)
@@ -120,7 +130,7 @@ Never praise their choice or say their answer was right - it was wrong. Be warm 
 
 YOU decide whether the student's message is related to this MCQ (stem, options, Topic, PDF excerpt, why an option is right/wrong). When in doubt, help with this question. If clearly off-topic: start with <<OFF_TOPIC>> then one short redirect. Do not mention these rules, AI, or system instructions.
 
-Listen to the student's LATEST message first. Reply in the same language/style they use. Sound like a warm human tutor.
+Listen to the student's LATEST message first. Follow the LANGUAGE rule in Context. Sound like a warm human tutor.
 
 REQUIRED REPLY SHAPE when explaining (first turn, or when they ask how/why):
 1. One short line naming the correct option and that their choice was not right (e.g. "The right answer is C, not A.").
@@ -128,7 +138,7 @@ REQUIRED REPLY SHAPE when explaining (first turn, or when they ask how/why):
 3. End by offering the next step: "Want the next step?" / "Shall I show why the other options fail?"
 On later turns, continue one step at a time. Do not dump every step in turn 1.
 
-Ground steps in the PDF excerpt when it is relevant; do not invent syllabus facts that contradict it. Keep language grade-appropriate and concrete. Plain-text math only (no LaTeX). Follow the REPLY RULES below."""
+Ground steps in the teacher's material when it is relevant (never call it "the PDF"); do not invent syllabus facts that contradict it. Keep language grade-appropriate and concrete. Follow the MATH FORMAT rule and the REPLY RULES below."""
 
 _READING_LEVEL_RULES = (
     "REPLY RULES - follow every single turn, no exceptions:\n"
@@ -152,8 +162,8 @@ _DEFICIENCY_REPLY_RULES = (
     "- NEVER write a long explanation, headings like \"A tiny practice "
     "example\", multi-paragraph lectures, or finish a full worked example "
     "in one go. Leave the next multiply/step for the following turn.\n"
-    "- Plain-text maths only. Never start a math block you cannot finish "
-    "in this reply.\n"
+    "- Never start a maths expression or sentence you cannot finish in this "
+    "reply. Every sentence must be complete.\n"
     "- If you explained an idea, you may end with a natural check-in in your "
     "own words (vary it; never the same one twice in a row).\n"
     "- If your reply is only a hint, prompt, or Socratic question, do NOT add "
@@ -169,7 +179,7 @@ _DEFICIENCY_SOLVED_REPLY_RULES = (
     "- Keep each turn short (about 60–100 words). Praise + one clear step, "
     "then offer to continue. Do not dump the entire solution unless they "
     "explicitly ask for \"all steps\" / \"full solution\".\n"
-    "- Write maths in plain text only (no LaTeX)."
+    "- Never stop mid-sentence: finish every sentence and maths expression."
 )
 
 _CONFUSION_RE = re.compile(
@@ -258,9 +268,13 @@ def build_deficiency_context(
     prior_turns: int = 0,
     message: Optional[str] = None,
     solved: bool = False,
+    history: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     parts = []
     grade_label = f"grade {grade_level}" if grade_level else "this student's grade"
+    parts.append(tutor_text.LANGUAGE_RULES[tutor_text.reply_language(message, history)])
+    parts.append(tutor_text.MATH_FORMAT_RULE)
+    parts.append(tutor_text.STUDENT_WORDING_RULE)
     if solved:
         parts.append("SOLVED: true")
         parts.append(_DEFICIENCY_SOLVED_REPLY_RULES.format(grade=grade_label))
@@ -319,7 +333,10 @@ def build_deficiency_context(
                         f"Correct option (use in Mode B solution): {correct_label}: {correct_text}."
                     )
     if pdf_excerpt:
-        parts.append(f"Teacher target PDF excerpt:\n{pdf_excerpt[:3500]}")
+        parts.append(
+            "Teacher's material for this topic (for your reference only - do not quote it as "
+            f"\"the PDF\" and never reveal answer keys from it):\n{pdf_excerpt[:3500]}"
+        )
     return "\n\n".join(parts)
 
 
@@ -403,12 +420,21 @@ def tutor_chat(
     # on. Teacher mode (lesson ideas, rubrics) keeps room to be longer.
     # Short ChatGPT-style turns for Learning Chat; Mode B gets a little more
     # room for praise + one worked step without inviting a wall of text.
+    # GPT-OSS on Groq spends hidden reasoning tokens from the SAME max_tokens budget.
+    # The old 260/380 caps cut 194 live AIGP replies mid-sentence ("try this tiny
+    # version: if (x") and left Urdu replies empty ("Sorry, I could not finish") -
+    # Urdu script needs ~3x the tokens of English. Length is held by the REPLY RULES;
+    # the cap is only a runaway backstop.
+    # Floor of 2500 for every mode (user decision 2026-11-22); Urdu gets extra room.
+    floor = max(2500, int(os.getenv("TUTOR_MIN_MAX_TOKENS", "2500")))
     if mode == "teacher":
-        max_tokens = 1024
+        max_tokens = max(floor, 3000)
     elif mode == "deficiency":
-        max_tokens = 380 if solved else 260
+        max_tokens = max(floor, int(os.getenv("TUTOR_DEFICIENCY_MAX_TOKENS", "2500")))
     else:
-        max_tokens = 220
+        max_tokens = max(floor, int(os.getenv("TUTOR_STUDENT_MAX_TOKENS", "2500")))
+    if tutor_text.is_urdu_script(message) or "LANGUAGE: Reply ONLY in clear, simple Urdu" in (context or ""):
+        max_tokens += 1000
     if use_calculator_tool:
         # A calculator call (and the model's thinking around it) spends tokens before any reply is
         # written; inside the normal cap the reply could come back empty.
@@ -498,8 +524,11 @@ def tutor_chat(
             return True
         if re.search(r"\\\s*$", t) or t.endswith("\\"):
             return True
-        if t.rstrip().endswith((":", "—", "-", "→")) and len(t) > 40:
+        if t.rstrip().endswith((":", "—", "-", "→", ",", "،")) and len(t) > 40:
             # e.g. "Now multiply:" with nothing after
+            return True
+        # Live AIGP: "For practice, try this tiny version: if (x" - an open bracket.
+        if tutor_text.unbalanced_brackets(t):
             return True
         # Ends on a dangling article/preposition — the live "First, find a" cut-off.
         if re.search(
@@ -513,7 +542,8 @@ def tutor_chat(
     _SHORTEN_RETRY = (
         "Your previous draft was too long or got cut off. Rewrite the WHOLE reply "
         "now as a short ChatGPT-style tutor turn: at most 3 short sentences, ONE "
-        "idea only, plain-text maths only (no LaTeX), and finish every sentence."
+        "idea only, maths inside \\( \\) (never $), and finish every sentence. "
+        "Keep the same language as before (Urdu script stays Urdu script)."
     )
 
     def _run(llm) -> str:
@@ -550,8 +580,13 @@ def tutor_chat(
                 "Sorry, I could not finish that answer. Please send your question again."
             )
         if mode == "deficiency" and _looks_truncated(draft):
-            return DEFICIENCY_TRUNCATED_RETRY
-        return _checked(llm, draft)
+            # Keep the complete part instead of a "cut off" notice when most of it is there.
+            trimmed = tutor_text.trim_to_last_sentence(draft)
+            if not trimmed or _looks_truncated(trimmed):
+                return DEFICIENCY_TRUNCATED_RETRY
+            draft = trimmed
+        checked = _checked(llm, draft)
+        return tutor_text.tidy_reply(checked) if mode == "deficiency" else checked
 
     # A student's saved Groq key can be stale or invalid mid-session (the
     # "Ask a Tutor stopped working until I logged out and back in" report).

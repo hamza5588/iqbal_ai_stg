@@ -99,3 +99,5 @@ _qa_audit_tmp/dil_saathi_class_mapping.json
 # Local adaptive-learning acceptance-test artifacts and baseline checkout
 .local/adaptive-*
 adaptive-*.log
+!tests/test_dil_feedback_20261117.py
+!tests/test_ai_guided_practice.py
