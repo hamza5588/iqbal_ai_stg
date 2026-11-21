@@ -351,6 +351,18 @@ def reveals_option_math(reply: str, options: List[dict], correct_index: Optional
         return False
     texts = [compact_math(o.get("text") or "") for o in options]
     correct = texts[correct_index]
+    if re.fullmatch(r"-?\d+(?:[./]\d+)?", correct):
+        # Short numeric key ("81"): a leak is the reply stating a result equal to it
+        # ("3^4 = 81", "x is 81", "... برابر 81"), unless that number is in the stem.
+        stem_numbers = set(re.findall(r"\d+(?:[./]\d+)?", compact_math(stem)))
+        if correct.lstrip("-") in stem_numbers:
+            return False
+        num = re.escape(correct)
+        plain = unicodedata.normalize("NFKC", reply)
+        return bool(
+            re.search(rf"(?:=|equals?|\bis\b|\bbe\b|برابر)\s*(?:\\[()\[\]]|\$|\{{|\s)*{num}(?!\d|[./]\d)", plain, re.I)
+            or re.search(rf"(?<![\d./^]){num}(?:\\[()\[\]]|\$|\}}|\s)*(?:ہے|ہوگا|بنتا|آتا)", plain)
+        )
     if len(correct) < 4:
         return False
     others = [t for k, t in enumerate(texts) if k != correct_index]

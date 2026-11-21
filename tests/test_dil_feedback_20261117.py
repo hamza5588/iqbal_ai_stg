@@ -324,3 +324,27 @@ def test_answer_guard_reply_speaks_the_students_language_and_never_says_pdf():
 def test_spacing_commands_do_not_leak_as_text_when_urdu_is_unwrapped():
     out = TT.tidy_reply(r"دیے گئے ہیں: \(a+b = 7 \qquadاور\qquad a-b = 3\) ہمیں")
     assert "qquad" not in out and "اور" in out and "a+b = 7" in out
+
+
+NUM_OPTS = [{"label": "A", "text": "12"}, {"label": "B", "text": "64"}, {"label": "C", "text": "81"}, {"label": "D", "text": "27"}]
+NUM_STEM = "Solve for 𝑥: log3(𝑥) = 4"
+
+
+@pytest.mark.parametrize("reply", [
+    r"So \(3^{4} = 81\), and that is x.",
+    "x is 81.",
+    "یعنی x برابر 81",
+    r"تو \(x\) کی قیمت \(81\) ہے۔",
+])
+def test_numeric_key_stated_as_result_is_a_leak(reply):
+    assert TT.reveals_option_math(reply, NUM_OPTS, 2, NUM_STEM)
+
+
+@pytest.mark.parametrize("reply", [
+    r"Rewrite it as \(3^{4} = x\) and work out \(3^4\).",            # method only
+    "Multiply 3 by itself 4 times, then compare with the options.",
+    "Is 64 the result? Check: 4^3 = 64, but the base here is 3.",   # wrong option discussed
+    r"\(\log_{3}(x)=4\) کو \(3^{4}=x\) لکھیں۔",
+])
+def test_numeric_hints_are_not_leaks(reply):
+    assert not TT.reveals_option_math(reply, NUM_OPTS, 2, NUM_STEM)
