@@ -1,6 +1,7 @@
 """Assessment attempt and scoring service."""
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 from datetime import datetime, timedelta
@@ -187,22 +188,31 @@ def heartbeat(
 
     attempt = get_attempt(attempt_id)
     credited = 0
+    unlocked_sync = False
     if attempt.status in ("in_progress", "locked"):
         assessment = get_assessment(attempt.assessment_id)
-        if session_token or getattr(attempt, "session_token", None):
+        token_mismatch = bool(
+            session_token
+            and getattr(attempt, "session_token", None)
+            and not hmac.compare_digest(str(attempt.session_token), str(session_token))
+        )
+        if token_mismatch and attempt.status == "in_progress":
+            # Teacher unlock rotates the token; sync the open client instead of hard-failing.
+            unlocked_sync = True
+        elif session_token or getattr(attempt, "session_token", None):
             exam_security_service.require_active_session(
                 attempt,
                 assessment,
                 session_token=session_token,
                 allow_locked=True,
             )
-        if current_question_index is not None:
+        if current_question_index is not None and not unlocked_sync:
             try:
                 attempt.current_question_index = max(0, int(current_question_index))
                 get_db().commit()
             except (TypeError, ValueError):
                 pass
-        if attempt.status == "in_progress":
+        if attempt.status == "in_progress" and not unlocked_sync:
             credited = _touch_attempt(attempt)
         elif attempt.status == "locked":
             # Timer keeps running while locked — refresh last_seen only.
@@ -223,6 +233,9 @@ def heartbeat(
         "server_now": datetime.utcnow().isoformat() + "Z",
     })
     info.update(exam_security_service.attempt_lock_payload(attempt))
+    if unlocked_sync:
+        info["unlocked"] = True
+        info["exam_unlocked"] = True
     return info
 
 
@@ -397,6 +410,22 @@ def start_attempt(
         exam_security_service.bind_attempt_security(
             existing, assessment, seb_ok=False, client_fingerprint=client_fingerprint
         )
+        # Never clear a Strict lock on resume/refresh — teacher unlock is the only path.
+        if existing.status == "locked":
+            exam_security_service.record_event(
+                existing,
+                "resume",
+                severity="info",
+                message="Locked attempt resumed (still locked; awaiting teacher unlock)",
+                verified=True,
+                trigger_strict_lock=False,
+            )
+            get_db().refresh(existing)
+            if existing.status != "locked":
+                raise LMSValidationError(
+                    "This examination is locked. Wait for your teacher to unlock it."
+                )
+            return existing, True, False
         exam_security_service.record_event(
             existing, "resume", severity="info", message="Attempt resumed", verified=True
         )

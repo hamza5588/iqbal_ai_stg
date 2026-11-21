@@ -141,6 +141,8 @@
   window.lmsExamOnLocked = function () {
     var el = document.getElementById('lmsQuizTaking');
     if (el) el.setAttribute('data-exam-locked', '1');
+    // Re-render so locked resume never shows answer UI under a stale paint.
+    if (questions && questions.length) render();
   };
   window.lmsExamOnUnlocked = async function () {
     var el = document.getElementById('lmsQuizTaking');
@@ -208,25 +210,33 @@
           }
         }
       }
-      if (d.resumed && typeof lmsShowToast === 'function') lmsShowToast('Resuming where you left off', 'success');
+      var attemptLocked = !!(d.is_locked || d.status === 'locked' || d.locked);
+      if (d.resumed && !attemptLocked && typeof lmsShowToast === 'function') {
+        lmsShowToast('Resuming where you left off', 'success');
+      }
+      if (d.resumed && attemptLocked && typeof lmsShowToast === 'function') {
+        lmsShowToast('Exam is locked — waiting for your teacher to unlock.', 'error');
+      }
       if (remainingSeconds != null && remainingSeconds <= 0) {
         await submitLmsQuiz(true);
         return;
       }
-      await loadQuestions();
+      // Apply lock state BEFORE loading questions so render() never paints unlocked UI.
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(true);
       if (typeof window.lmsExamSecurityStart === 'function') {
         window.lmsExamSecurityStart({
           attemptId: attemptId,
           sessionToken: d.session_token,
           security: sec,
-          requestFullscreen: !(d.is_locked || d.status === 'locked'),
-          locked: !!(d.is_locked || d.status === 'locked'),
+          requestFullscreen: !attemptLocked,
+          locked: attemptLocked,
+          is_locked: attemptLocked,
           status: d.status,
           lock_reason: d.lock_reason,
           getQuestionIndex: function () { return currentQ; }
         });
       }
+      await loadQuestions();
       lmsOpenModal('lmsStudentModal');
       startQuizTimer();
     } catch (err) {

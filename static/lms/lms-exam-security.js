@@ -12,6 +12,8 @@
     listenersBound: false,
     locked: false,
     lockUiShown: false,
+    /** Once server/start says locked, only teacher unlock may clear. Survives stale heartbeats. */
+    requiresTeacherUnlock: false,
     eventQueue: [],
     lastLockPostAt: 0,
     getQuestionIndex: null,
@@ -102,17 +104,17 @@
 
   function handleServerLock(data) {
     if (!data) return;
-    var prevToken = state.sessionToken;
     if (data.session_token) state.sessionToken = data.session_token;
     var locked = data.is_locked || data.status === 'locked' || data.locked;
     if (locked) {
+      state.requiresTeacherUnlock = true;
       if (!state.lockUiShown) showLockedOverlay(data.lock_reason || 'exam window left');
-    } else if (state.lockUiShown) {
-      // Strict: never clear on a plain in_progress heartbeat (stale race / Continue).
-      // Only a real teacher unlock clears the UI — unlock rotates session_token and/or sets unlocked=true.
-      var tokenRotated = !!(data.session_token && prevToken && data.session_token !== prevToken);
-      var teacherUnlock = data.unlocked === true || data.exam_unlocked === true || tokenRotated;
+    } else if (state.lockUiShown || state.requiresTeacherUnlock) {
+      // Strict: never clear on plain in_progress (stale heartbeat / Continue / resume).
+      // Only an explicit teacher unlock flag may clear the UI.
+      var teacherUnlock = data.unlocked === true || data.exam_unlocked === true;
       if (teacherUnlock && (data.status === 'in_progress' || data.is_locked === false)) {
+        state.requiresTeacherUnlock = false;
         hideLockedOverlay();
         if (isStrict()) requestFullscreen();
       }
@@ -283,7 +285,8 @@
     state.sessionToken = opts.sessionToken || null;
     state.security = opts.security || null;
     state.getQuestionIndex = opts.getQuestionIndex || null;
-    state.locked = !!(opts.locked || (opts.status === 'locked'));
+    state.locked = !!(opts.locked || opts.is_locked || (opts.status === 'locked'));
+    if (state.locked) state.requiresTeacherUnlock = true;
     ensureSyncBadge();
     updateSyncBadge();
     bindListeners();
@@ -304,6 +307,7 @@
     state.attemptId = null;
     state.sessionToken = null;
     state.locked = false;
+    state.requiresTeacherUnlock = false;
     hideLockedOverlay();
     if (typeof window.lmsSetAssessmentCopyGuard === 'function') {
       window.lmsSetAssessmentCopyGuard(false);

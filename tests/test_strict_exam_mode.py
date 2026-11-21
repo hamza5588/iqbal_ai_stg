@@ -310,28 +310,20 @@ def _client_handle_server_lock(state: dict, data: dict) -> dict:
     """Mirror of static/lms/lms-exam-security.js handleServerLock (strict unlock gate)."""
     if not data:
         return state
-    prev_token = state.get("sessionToken")
     if data.get("session_token"):
         state["sessionToken"] = data["session_token"]
     locked = data.get("is_locked") or data.get("status") == "locked" or data.get("locked")
     if locked:
+        state["requiresTeacherUnlock"] = True
         if not state.get("lockUiShown"):
             state["lockUiShown"] = True
             state["locked"] = True
-    elif state.get("lockUiShown"):
-        token_rotated = bool(
-            data.get("session_token")
-            and prev_token
-            and data.get("session_token") != prev_token
-        )
-        teacher_unlock = (
-            data.get("unlocked") is True
-            or data.get("exam_unlocked") is True
-            or token_rotated
-        )
+    elif state.get("lockUiShown") or state.get("requiresTeacherUnlock"):
+        teacher_unlock = data.get("unlocked") is True or data.get("exam_unlocked") is True
         if teacher_unlock and (
             data.get("status") == "in_progress" or data.get("is_locked") is False
         ):
+            state["requiresTeacherUnlock"] = False
             state["lockUiShown"] = False
             state["locked"] = False
     return state
@@ -362,10 +354,16 @@ def test_double_cross_then_stale_heartbeat_must_keep_client_lock():
     Reproduces: lock shown locally on leave → heartbeat arrives before/with wrong
     status → student clicks Continue and can take the quiz while server may still be locked.
     """
-    state = {"locked": False, "lockUiShown": False, "sessionToken": "tok-a"}
+    state = {
+        "locked": False,
+        "lockUiShown": False,
+        "requiresTeacherUnlock": False,
+        "sessionToken": "tok-a",
+    }
     # First cross: client fail-closed (lms-exam-security.js showLockedOverlay before POST completes)
     state["locked"] = True
     state["lockUiShown"] = True
+    state["requiresTeacherUnlock"] = True
     # Concurrent or follow-up heartbeat while DB already locked — common wrong client response:
     stale = {
         "status": "in_progress",
@@ -380,8 +378,21 @@ def test_double_cross_then_stale_heartbeat_must_keep_client_lock():
 
 
 def test_teacher_unlock_payload_clears_client_lock():
-    """Teacher unlock rotates session_token / sets unlocked=true → client may resume."""
-    state = {"locked": True, "lockUiShown": True, "sessionToken": "tok-a"}
+    """Teacher unlock must set unlocked=true — token rotation alone must not unlock."""
+    state = {
+        "locked": True,
+        "lockUiShown": True,
+        "requiresTeacherUnlock": True,
+        "sessionToken": "tok-a",
+    }
+    # Token rotation without unlocked flag (stale / resume race) must keep lock.
+    rotated_only = {
+        "status": "in_progress",
+        "is_locked": False,
+        "session_token": "tok-b",
+    }
+    state = _client_handle_server_lock(state, rotated_only)
+    assert state["locked"] is True and state["lockUiShown"] is True
     unlocked = {
         "status": "in_progress",
         "is_locked": False,
@@ -394,10 +405,73 @@ def test_teacher_unlock_payload_clears_client_lock():
 
 def test_double_cross_server_locked_client_keeps_lock_ui():
     """When server payloads stay locked, client logic must keep the lock UI shown."""
-    state = {"locked": True, "lockUiShown": True}
+    state = {"locked": True, "lockUiShown": True, "requiresTeacherUnlock": True}
     for payload in (
         {"status": "locked", "is_locked": True, "reason": "already_locked"},
         {"status": "locked", "is_locked": True},
     ):
         state = _client_handle_server_lock(state, payload)
     assert state["locked"] and state["lockUiShown"]
+
+
+def test_refresh_resume_payload_stays_locked(db, monkeypatch):
+    """Resume/start after lock must keep status locked and is_locked true (no auto-unlock)."""
+    a, _, student, _, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    old_token = attempt.session_token
+    ess.record_event(attempt, "fullscreen_exit", severity="warn")
+    db.refresh(attempt)
+    assert attempt.status == "locked"
+    again, resumed, done = attempt_service.start_attempt(student.id, a.id)
+    assert resumed and not done
+    assert again.status == "locked"
+    assert again.session_token == old_token
+    payload = ess.attempt_lock_payload(again)
+    assert payload["is_locked"] is True and payload["status"] == "locked"
+    # Stale client resume must not clear lock without unlocked flag.
+    state = {
+        "locked": True,
+        "lockUiShown": True,
+        "requiresTeacherUnlock": True,
+        "sessionToken": old_token,
+    }
+    state = _client_handle_server_lock(
+        state,
+        {
+            "status": again.status,
+            "is_locked": payload["is_locked"],
+            "session_token": again.session_token,
+            "lock_reason": again.lock_reason,
+        },
+    )
+    assert state["locked"] is True
+    # Fake "resume as unlocked" in_progress must still keep client lock.
+    state = _client_handle_server_lock(
+        state,
+        {"status": "in_progress", "is_locked": False, "session_token": old_token},
+    )
+    assert state["locked"] is True
+
+
+def test_teacher_unlock_then_resume_clears_lock(db, monkeypatch):
+    a, _, student, teacher, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    ess.record_event(attempt, "tab_hidden", severity="warn")
+    db.refresh(attempt)
+    unlocked = ess.unlock_attempt(attempt, teacher_id=teacher.id, message="ok")
+    assert unlocked.status == "in_progress"
+    again, resumed, done = attempt_service.start_attempt(student.id, a.id)
+    assert resumed and again.status == "in_progress"
+    assert ess.attempt_lock_payload(again)["is_locked"] is False
+    # Heartbeat with stale pre-unlock token must sync unlocked=true.
+    hb = attempt_service.heartbeat(again.id, session_token="stale-pre-unlock-token")
+    assert hb.get("unlocked") is True
+    assert hb.get("session_token") == again.session_token
+    state = {
+        "locked": True,
+        "lockUiShown": True,
+        "requiresTeacherUnlock": True,
+        "sessionToken": "stale-pre-unlock-token",
+    }
+    state = _client_handle_server_lock(state, hb)
+    assert state["locked"] is False
