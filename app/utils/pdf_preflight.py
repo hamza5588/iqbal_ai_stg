@@ -12,6 +12,7 @@ None of these upload flows has OCR that runs before the text-layer check in
 """
 from __future__ import annotations
 
+import os
 import re
 import threading
 import zlib
@@ -176,10 +177,17 @@ def preflight_check_pdf_inner(
             pass
 
 
+def _preflight_timeout_seconds() -> int:
+    try:
+        return max(5, int(os.getenv("RAG_PREFLIGHT_TIMEOUT_SECONDS", "45")))
+    except (TypeError, ValueError):
+        return 45
+
+
 def preflight_check_pdf(
     file_bytes: bytes,
     max_scan_pages: int = 25,
-    timeout_seconds: int = 15,
+    timeout_seconds: int | None = None,
     reject_mostly_scanned: bool = True,
 ) -> dict:
     """
@@ -191,6 +199,8 @@ def preflight_check_pdf(
     thread with a bounded `.join()` means a hang costs one leaked thread
     instead of an unresponsive request/worker.
     """
+    if timeout_seconds is None:
+        timeout_seconds = _preflight_timeout_seconds()
     box = {}
 
     def _run():

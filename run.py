@@ -33,4 +33,6 @@ if __name__ == '__main__':
     # Enable reloader in debug mode if not explicitly disabled
     use_reloader = debug and os.environ.get('FLASK_USE_RELOADER', '1') == '1'
     
-    app.run(debug=debug, host='0.0.0.0', port=port, use_reloader=use_reloader, threaded=False)
+    # threaded=True required for parallel QA uploads + sync-background ingest status polls
+    threaded = os.environ.get('FLASK_THREADED', '1') == '1'
+    app.run(debug=debug, host='0.0.0.0', port=port, use_reloader=use_reloader, threaded=threaded)

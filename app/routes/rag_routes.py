@@ -102,6 +102,12 @@ def _is_transient_db_connection_error(exc: Exception) -> bool:
     return any(marker in msg for marker in markers)
 
 
+def _get_sync_background_threshold_mb() -> float:
+    """PDFs at or above this size use async-style polling when Celery is off."""
+    # Default 0: corpus stress PDFs are mostly <2MB; sync HTTP ingest contends under parallel QA (BUG-013)
+    return float(os.getenv("RAG_SYNC_BACKGROUND_THRESHOLD_MB", "0"))
+
+
 def _get_ingest_tier(file_size_mb: float) -> dict:
     """
     Resolve ingest execution strategy by file size.
@@ -477,7 +483,79 @@ def ingest():
             )
 
         # When Celery is disabled (e.g. local dev), run ingestion synchronously in-process
+        # unless the PDF is large enough that blocking the HTTP request would time out clients.
         use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
+        if not use_celery and size_mb >= _get_sync_background_threshold_mb():
+            try:
+                _ingest_deadline = datetime.utcnow() + timedelta(
+                    seconds=ingest_tier["stream_join_timeout"] + 60
+                )
+                _save_thread_to_db(
+                    user_id,
+                    thread_id,
+                    filename,
+                    ingest_result=None,
+                    ingest_deadline_at=_ingest_deadline,
+                )
+            except Exception:
+                logger.warning("Failed to precreate thread row for thread_id=%s", thread_id, exc_info=True)
+
+            from app.utils.sync_ingest_registry import create_sync_ingest_job, start_sync_ingest_worker
+
+            app_obj = current_app._get_current_object()
+            job = create_sync_ingest_job(user_id, thread_id, filename, conversation_id)
+
+            def _on_success(result):
+                _save_thread_to_db(user_id, thread_id, filename, ingest_result=result)
+                try:
+                    load_test_mode = (
+                        app_obj.config.get("LOAD_TEST_MODE", False)
+                        or str(app_obj.config.get("ENV", "")).lower() == "staging"
+                    )
+                    enable_headings = app_obj.config.get("ENABLE_RAG_HEADINGS", True)
+                    delay_headings_for_load_test = app_obj.config.get(
+                        "DELAY_RAG_HEADINGS_FOR_LOAD_TEST", False
+                    )
+                    if enable_headings and not (load_test_mode and delay_headings_for_load_test):
+                        _start_heading_extraction_background(thread_id, user_id, app_obj)
+                except Exception as bg_err:
+                    logger.error(
+                        "Failed to start background heading extraction for thread %s (sync bg): %s",
+                        thread_id,
+                        bg_err,
+                        exc_info=True,
+                    )
+
+            def _on_failure(error_msg: str):
+                _save_thread_to_db(user_id, thread_id, filename, ingest_error=error_msg)
+
+            start_sync_ingest_worker(
+                app_obj,
+                job,
+                file_bytes,
+                ingest_pdf,
+                _on_success,
+                _on_failure,
+            )
+            logger.info(
+                "Started in-process background ingest %s for %s (thread_id: %s, tier=%s, %.1f MB)",
+                job.task_id,
+                filename,
+                thread_id,
+                ingest_tier["name"],
+                size_mb,
+            )
+            return jsonify({
+                'success': True,
+                'message': 'PDF ingestion started in background',
+                'task_id': job.task_id,
+                'status': 'processing',
+                'thread_id': thread_id,
+                'conversation_id': conversation_id,
+                'filename': filename,
+                'ingest_tier': ingest_tier["name"],
+            })
+
         if not use_celery:
             try:
                 # Warm up embedding model first so it's cached before ingestion and first query is fast
@@ -1646,12 +1724,23 @@ def get_ingest_status(task_id):
         if 'user_id' not in session:
             return jsonify({'error': 'Not authenticated'}), 401
 
-        if not current_app.config.get('USE_CELERY_FOR_INGESTION', False):
-            return jsonify({
-                'error': 'Task status is not available. PDF ingestion is running in-process (Celery is disabled).'
-            }), 400
-
         user_id = session['user_id']
+        use_celery = current_app.config.get('USE_CELERY_FOR_INGESTION', False)
+
+        if not use_celery:
+            from app.utils.sync_ingest_registry import get_sync_ingest_job
+
+            job = get_sync_ingest_job(task_id, user_id)
+            if job:
+                if not _validate_thread_id(job.thread_id, user_id):
+                    return jsonify({'error': 'Access denied. This task does not belong to you.'}), 403
+                response = job.status_response()
+                if response.get('status') == 'success':
+                    warmup_rag_embeddings()
+                return jsonify(response)
+            return jsonify({
+                'error': 'Task not found or task status is not available for this upload.'
+            }), 404
 
         # Get task result
         task = ingest_pdf_task.AsyncResult(task_id)
