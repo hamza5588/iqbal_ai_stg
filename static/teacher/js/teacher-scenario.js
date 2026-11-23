@@ -189,17 +189,21 @@
       d.rubric.map(function (c, i) { return '<tr><td>' + esc(c.label) + '</td><td><input type="number" min="0" max="100" step="1" data-rubric="' + i + '" value="' + c.weight + '" aria-label="Weight for ' + esc(c.label) + '"></td></tr>'; }).join('') +
       '</tbody></table><div class="sba-note">Default weights are a starting point, not an approved grading policy. Adjust them to your course.</div></div>' +
       '</div><div class="sba-actions"><button class="td-btn td-btn-primary" id="tdSbaSave">Save settings</button><span class="sba-note" id="tdSbaSaveMsg"></span></div>' +
-      '<h3 style="margin-top:22px;">Documents</h3><div class="sba-grid">' +
+      '<h3 style="margin-top:22px;">Documents</h3>' +
+      '<p class="sba-note">Choose a PDF under each type you need, then use the single <b>Upload selected PDFs</b> button below.</p>' +
+      '<div class="sba-grid">' +
       DOC_TYPES.map(function (t) {
         var list = (docsBy[t[0]] || []).filter(function (x) { return x.is_active; });
         var old = (docsBy[t[0]] || []).filter(function (x) { return !x.is_active; });
         return '<div class="sba-upload" data-doc-type="' + t[0] + '"><h4>' + esc(t[1]) + '</h4><p>' + esc(t[2]) + '</p>' +
           '<input type="file" accept="application/pdf,.pdf" id="sbaFile_' + t[0] + '" aria-label="' + esc(t[1]) + ' PDF">' +
-          '<button class="td-btn td-btn-outline td-btn-sm" data-upload="' + t[0] + '">Upload PDF</button>' +
           '<div style="margin-top:10px;">' + (list.length ? list.map(docRow).join('') : '<div class="sba-note">No document uploaded.</div>') + '</div>' +
           (old.length ? '<details style="margin-top:6px;"><summary class="sba-note">' + old.length + ' earlier version(s)</summary>' + old.map(docRow).join('') + '</details>' : '') +
           '</div>';
       }).join('') + '</div>' +
+      '<div class="sba-actions" style="margin-top:14px;">' +
+        '<button type="button" class="td-btn td-btn-primary" id="tdSbaUploadAll"><i class="fas fa-upload"></i> Upload selected PDFs</button>' +
+        '<span class="sba-note" id="tdSbaUploadMsg"></span></div>' +
       '<h3 style="margin-top:22px;">Extracted sample questions (' + d.sample_questions.length + ')</h3>' +
       (d.sample_questions.length ? d.sample_questions.map(function (s) {
         return '<div class="sba-q"><div class="sba-q-head"><span class="sba-note">p. ' + esc(s.page || '?') + (s.question_type ? ' · ' + esc(s.question_type) : '') + (s.difficulty ? ' · ' + esc(s.difficulty) : '') + '</span>' +
@@ -207,9 +211,7 @@
       }).join('') : '<p class="sba-note">Upload a sample-questions PDF to see the questions the AI will learn the style from.</p>');
 
     bind('tdSbaSave', saveSettings);
-    body.querySelectorAll('[data-upload]').forEach(function (b) {
-      b.addEventListener('click', function () { upload(b.getAttribute('data-upload'), b); });
-    });
+    bind('tdSbaUploadAll', uploadSelected);
     body.querySelectorAll('[data-doc-del]').forEach(function (b) {
       b.addEventListener('click', async function () {
         if (!confirm('Remove this document? It stays in history for answers already graded.')) return;
@@ -255,18 +257,38 @@
       '</div>';
   }
 
-  async function upload(type, btn) {
-    var input = $('sbaFile_' + type);
-    if (!input.files || !input.files[0]) { toast('Choose a PDF first.', 'error'); return; }
-    var fd = new FormData();
-    fd.append('doc_type', type);
-    fd.append('file', input.files[0]);
-    btn.disabled = true;
-    try {
-      await api('/assessments/' + state.detail.id + '/documents', { method: 'POST', body: fd });
-      toast('Uploaded. Processing…');
-      await open(state.detail.id, true);
-    } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
+  async function uploadSelected() {
+    var btn = $('tdSbaUploadAll');
+    var msg = $('tdSbaUploadMsg');
+    var pending = DOC_TYPES.map(function (t) {
+      var input = $('sbaFile_' + t[0]);
+      return { type: t[0], label: t[1], file: input && input.files && input.files[0] ? input.files[0] : null };
+    }).filter(function (x) { return !!x.file; });
+    if (!pending.length) {
+      toast('Choose at least one PDF under Learning content, Sample questions, or Reference answers.', 'error');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (msg) { msg.textContent = 'Uploading…'; msg.className = 'sba-note'; }
+    var ok = 0;
+    var errors = [];
+    for (var i = 0; i < pending.length; i++) {
+      var item = pending[i];
+      var fd = new FormData();
+      fd.append('doc_type', item.type);
+      fd.append('file', item.file);
+      try {
+        await api('/assessments/' + state.detail.id + '/documents', { method: 'POST', body: fd });
+        ok += 1;
+      } catch (e) {
+        errors.push(item.label + ': ' + (e.message || 'failed'));
+      }
+    }
+    if (ok) toast(ok === 1 ? 'Uploaded. Processing…' : ok + ' PDFs uploaded. Processing…');
+    if (errors.length) toast(errors.join(' · '), 'error');
+    if (btn) btn.disabled = false;
+    if (msg) msg.textContent = errors.length ? errors.join(' · ') : '';
+    if (ok) await open(state.detail.id, true);
   }
 
   async function saveSettings() {
