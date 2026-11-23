@@ -1,7 +1,7 @@
 """Dual-evidence (text + page images) MCQ extraction for diagnostic/quiz PDFs.
 
 Uses ``app.services.quiz.hybrid_vision_pipeline`` (in-app dual-evidence flow):
-PDF pre-check → PyMuPDF text + high-res page renders → Qwen Vision/Groq →
+PDF pre-check → PyMuPDF text + high-res page renders → OpenAI vision (default) →
 structured MCQs → optional metadata enrichment.
 
 Does not import root ``persor.py`` and does not touch the main Learning Chat path.
@@ -165,7 +165,7 @@ def extract_mcqs_hybrid_vision(
         with open(temp_path, "wb") as handle:
             handle.write(pdf_bytes)
 
-        _progress("extract", 70, "Hybrid vision: Qwen analyzing text + page images...")
+        _progress("extract", 70, "Hybrid vision: analyzing text + page images...")
         result = vision.extract_mcqs(temp_path)
     finally:
         try:

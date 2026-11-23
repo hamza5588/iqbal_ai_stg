@@ -343,10 +343,16 @@ def run_pdf_quiz_pipeline(
             )
             msg = str(hybrid_exc) or "Hybrid vision extraction failed"
             # Config / infra failures must not be masked as "bad PDF format".
-            if "GROQ_API_KEY" in msg or "API key" in msg.lower():
+            if (
+                "OPENAI_API_KEY" in msg
+                or "GROQ_API_KEY" in msg
+                or "API key" in msg.lower()
+            ):
                 raise LMSValidationError(
-                    "Hybrid vision is not configured: missing Groq API key. "
-                    "Set GROQ_API_KEY on the server or save it in Admin → Settings."
+                    "Hybrid vision is not configured: missing API key. "
+                    "Set OPENAI_API_KEY (default vision provider) on the server "
+                    "or save it in Admin → Settings. "
+                    "If QUIZ_VISION_PROVIDER=groq, set GROQ_API_KEY instead."
                 ) from hybrid_exc
             from app.services.quiz.hybrid_vision_pipeline import is_transient_provider_error
 

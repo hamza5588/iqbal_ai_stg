@@ -1,6 +1,6 @@
 # ============================================================
 # MATH MCQ PDF EXTRACTOR (in-app)
-# Dual-evidence hybrid pipeline (Qwen Vision + Groq)
+# Dual-evidence hybrid pipeline (OpenAI vision by default)
 #
 # Used by quiz + diagnostic LMS flows via hybrid_mcq_extractor.
 # Root persor.py is NOT imported by the app.
@@ -23,7 +23,7 @@
 #       │                      │
 #       └──────────┬───────────┘
 #                  ▼
-#        Qwen Vision / Groq
+#        OpenAI vision (default)
 #         Hybrid Analysis
 #                  │
 #                  ▼
@@ -45,12 +45,15 @@
 # Install:
 #
 #   pip install -U pymupdf pydantic python-dotenv \
-#       langchain-core langchain-groq groq
+#       langchain-core langchain-openai openai
+#       # optional fallback: langchain-groq groq
 #
 # .env:
 #
-#   GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxx
-#   GROQ_VISION_MODEL=qwen/qwen3.8-27b   # optional
+#   OPENAI_API_KEY=sk-...
+#   OPENAI_VISION_MODEL=gpt-4o          # optional
+#   QUIZ_VISION_PROVIDER=openai         # default; set groq to use Qwen/Groq
+#   GROQ_API_KEY=gsk_...                # only if QUIZ_VISION_PROVIDER=groq
 #
 # ============================================================
 
@@ -78,11 +81,40 @@ from pydantic import BaseModel, ConfigDict, Field
 load_dotenv()
 
 # Resolved lazily so this module can be imported by the quiz pipeline
-# without crashing the Flask app when GROQ_API_KEY is unset at import time.
+# without crashing the Flask app when API keys are unset at import time.
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Groq vision model (Qwen multimodal). Override via .env or admin default.
-VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+# Defaults. QUIZ_VISION_PROVIDER=openai (default) or groq.
+DEFAULT_OPENAI_VISION_MODEL = "gpt-4o"
+DEFAULT_GROQ_VISION_MODEL = "qwen/qwen3.8-27b"
+VISION_MODEL = os.getenv("OPENAI_VISION_MODEL") or os.getenv(
+    "GROQ_VISION_MODEL", DEFAULT_GROQ_VISION_MODEL
+)
+
+
+def resolve_vision_provider() -> str:
+    """openai (default) or groq."""
+    return (os.getenv("QUIZ_VISION_PROVIDER") or "openai").strip().lower() or "openai"
+
+
+def _require_openai_api_key() -> str:
+    """Resolve OpenAI key at call time: env first, then admin SystemSettings."""
+    key = (os.getenv("OPENAI_API_KEY") or OPENAI_API_KEY or "").strip()
+    if key:
+        return key
+    try:
+        from app.utils.llm_factory import _resolve_stored_api_key
+
+        key = (_resolve_stored_api_key("openai") or "").strip()
+    except Exception:
+        key = ""
+    if key:
+        return key
+    raise ValueError(
+        "OPENAI_API_KEY not found. Set OPENAI_API_KEY in the container env "
+        "or save an OpenAI API key in Admin → Settings."
+    )
 
 
 def _require_groq_api_key() -> str:
@@ -105,7 +137,28 @@ def _require_groq_api_key() -> str:
 
 
 def resolve_vision_model() -> str:
-    """Prefer env, then admin Groq default when it is a Qwen model, else built-in."""
+    """Prefer provider-specific env, then admin default, else built-in."""
+    if resolve_vision_provider() == "openai":
+        env_model = (os.getenv("OPENAI_VISION_MODEL") or "").strip()
+        if env_model:
+            return env_model
+        try:
+            from app.models.database_models import SystemSettings
+            from app.utils.db import get_db
+
+            db = get_db()
+            row = (
+                db.query(SystemSettings)
+                .filter(SystemSettings.key == "openai_default_model")
+                .first()
+            )
+            admin_model = (row.value or "").strip() if row else ""
+            if admin_model.lower().startswith(("gpt-", "o1", "o3", "o4")):
+                return admin_model
+        except Exception:
+            pass
+        return DEFAULT_OPENAI_VISION_MODEL
+
     env_model = (os.getenv("GROQ_VISION_MODEL") or "").strip()
     if env_model:
         return env_model
@@ -124,17 +177,25 @@ def resolve_vision_model() -> str:
             return admin_model
     except Exception:
         pass
-    return VISION_MODEL or "qwen/qwen3.8-27b"
+    return (os.getenv("GROQ_VISION_MODEL") or DEFAULT_GROQ_VISION_MODEL).strip() or DEFAULT_GROQ_VISION_MODEL
 
-# Groq currently allows a small number of images per request.
-MAX_IMAGES_PER_REQUEST = int(os.getenv("GROQ_MAX_IMAGES", "3"))
+# Provider image batch size (Groq is stricter; OpenAI can take more).
+MAX_IMAGES_PER_REQUEST = int(
+    os.getenv("VISION_MAX_IMAGES")
+    or os.getenv("OPENAI_MAX_IMAGES")
+    or os.getenv("GROQ_MAX_IMAGES", "3")
+)
 
 # Render resolutions (DPI). Fail path retries at the higher value.
 DPI_DEFAULT = int(os.getenv("PDF_RENDER_DPI", "150"))
 DPI_RETRY = int(os.getenv("PDF_RENDER_DPI_RETRY", "300"))
 
 JPEG_QUALITY = int(os.getenv("PDF_RENDER_JPEG_QUALITY", "85"))
-MAX_VISION_TOKENS = int(os.getenv("GROQ_VISION_MAX_TOKENS", "16384"))
+MAX_VISION_TOKENS = int(
+    os.getenv("VISION_MAX_TOKENS")
+    or os.getenv("OPENAI_VISION_MAX_TOKENS")
+    or os.getenv("GROQ_VISION_MAX_TOKENS", "16384")
+)
 
 # Typical MCQ option set is A-D. Incomplete option lists trigger repair.
 MIN_OPTIONS = int(os.getenv("MCQ_MIN_OPTIONS", "4"))
@@ -600,14 +661,25 @@ def render_pdf_pages(
 
 
 # ============================================================
-# 5. GROQ / QWEN VISION MODEL
+# 5. VISION MODEL (OpenAI default; Groq/Qwen optional)
 # ============================================================
 
-def create_vision_llm() -> ChatGroq:
+def create_vision_llm():
     """
-    Qwen multimodal model on Groq for hybrid text+image analysis.
+    Vision LLM for hybrid text+image analysis.
+    Default: OpenAI (gpt-4o). Set QUIZ_VISION_PROVIDER=groq for Qwen on Groq.
     """
+    provider = resolve_vision_provider()
     model = resolve_vision_model()
+    if provider == "openai":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model,
+            api_key=_require_openai_api_key(),
+            temperature=0,
+            max_tokens=min(MAX_VISION_TOKENS, 16384),
+        )
 
     return ChatGroq(
         model=model,
@@ -620,9 +692,9 @@ def create_vision_llm() -> ChatGroq:
     )
 
 
-def create_structured_llm(llm: ChatGroq, schema_model: type[BaseModel]):
+def create_structured_llm(llm, schema_model: type[BaseModel]):
     """
-    Bind Groq native JSON-schema mode (not tool calling).
+    Bind native JSON-schema mode (not tool calling).
     """
 
     return llm.bind(
@@ -718,12 +790,12 @@ def _record_vision_llm_usage(
     error_class: Optional[str] = None,
     error_message: Optional[str] = None,
 ) -> None:
-    """Persist one hybrid-vision Groq call into llm_usage_events."""
+    """Persist one hybrid-vision LLM call into llm_usage_events."""
     try:
         from app.utils.llm_gateway import persist_llm_usage_event
 
         persist_llm_usage_event(
-            provider="groq",
+            provider=resolve_vision_provider(),
             model=resolve_vision_model(),
             duration_ms=int(duration_ms),
             success=success,
