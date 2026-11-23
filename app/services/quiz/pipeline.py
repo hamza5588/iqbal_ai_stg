@@ -195,6 +195,104 @@ def _run_hybrid_vision_extraction(
     return questions, source_numbers, answer_letters, warnings, confidence, title
 
 
+def _extract_pdf_plain_text(pdf_bytes: bytes) -> str:
+    """Best-effort native text layer (no OCR). Empty for pure image scans."""
+    import fitz
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        return "\n".join((page.get_text() or "") for page in doc)
+    finally:
+        doc.close()
+
+
+def _generate_mcqs_from_document_content(
+    *,
+    text: str,
+    pdf_bytes: Optional[bytes],
+    wanted: Optional[int],
+    title_hint: Optional[str],
+    progress_callback: ProgressCallback,
+    user_id: Optional[int] = None,
+) -> tuple[List[MCQQuestion], List[str]]:
+    """Build quiz MCQs from learning-content PDFs that are not already exam papers.
+
+    Teachers may upload chapter notes / reference material with no printed MCQs.
+    AI writes grounded A–D items from the document text.
+    """
+    from app.services.quiz.diagnostic_generator import generate_mcqs_from_content
+    from app.utils.llm_gateway import llm_workflow
+
+    content = (text or "").strip()
+    if not content and pdf_bytes:
+        try:
+            content = _extract_pdf_plain_text(pdf_bytes).strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("PyMuPDF text extract for content→MCQ failed: %s", exc)
+    if not content:
+        raise AssessmentDocValidationError(
+            detail="No readable PDF text available for content→MCQ generation",
+            public_message=(
+                "This PDF has no readable text to build quiz questions from. "
+                "Upload a text PDF (or a clearer scan with a text layer)."
+            ),
+            reason="NO_CONTENT_FOR_GENERATION",
+        )
+
+    count = wanted if wanted is not None else 10
+    count = max(1, min(int(count), _MAX_CONTENT_MCQS))
+    topic = (title_hint or "Document content").strip()[:200] or "Document content"
+    clipped = content[:12000]
+    _report_progress(
+        progress_callback,
+        "extract",
+        74,
+        f"Building {count} quiz question(s) from document content...",
+    )
+
+    out: List[MCQQuestion] = []
+    warnings = [
+        "Mode: content→MCQ generation (PDF was learning content, not an exam paper; "
+        "AI wrote quiz items grounded in the material)."
+    ]
+    exclude: List[str] = []
+    with llm_workflow(
+        "quiz_content_mcq_generation",
+        user_id=user_id,
+        user_role="teacher" if user_id else None,
+        traffic_source="production",
+    ):
+        remaining = count
+        while remaining > 0 and len(out) < count:
+            batch_n = min(10, remaining)
+            batch = generate_mcqs_from_content(
+                clipped,
+                topic,
+                batch_n,
+                difficulty="medium",
+                exclude_question_texts=exclude,
+                strict_grounding=True,
+            )
+            if not batch:
+                break
+            out.extend(batch)
+            exclude.extend((q.question_text or "")[:200] for q in batch)
+            remaining = count - len(out)
+            if len(batch) < batch_n:
+                break
+
+    if not out:
+        raise AssessmentDocValidationError(
+            detail="content→MCQ generation returned no questions",
+            public_message=(
+                "We could not create quiz questions from this document's content. "
+                "Try a longer or clearer PDF with teaching material."
+            ),
+            reason="CONTENT_GENERATION_EMPTY",
+        )
+    return out[:count], warnings
+
+
 class _HybridExtractionShim:
     """Duck-type for pipeline confidence / title lift after hybrid vision."""
 
@@ -316,9 +414,12 @@ def run_pdf_quiz_pipeline(
                 "No extractable PDF text layer; hybrid vision is using page images only."
             )
 
-        # Mandatory path: dual-evidence hybrid vision (same engine as persor.py CLI).
-        # Failures are not swallowed — no canonical / text / LLM content fallback.
+        # Prefer hybrid vision when the PDF already has exam questions; otherwise
+        # generate MCQs from the document's learning content (MCQ layout not required).
         _ = hybrid_vision_enabled()  # logs if QUIZ_HYBRID_VISION tries to disable
+        content_generated = False
+        hybrid_title = None
+        hybrid_conf = 0.75
         try:
             (
                 batch_questions,
@@ -334,6 +435,7 @@ def run_pdf_quiz_pipeline(
                 progress_callback=progress_callback,
                 user_id=user_id,
             )
+            warnings.extend(hybrid_warnings)
         except AssessmentDocValidationError:
             raise
         except Exception as hybrid_exc:  # noqa: BLE001
@@ -364,46 +466,75 @@ def run_pdf_quiz_pipeline(
                     "read right now. The document was NOT rejected - please try the upload again in a "
                     "few minutes."
                 ) from hybrid_exc
-            # Keep the real extraction detail for logs; show a clearer teacher message
-            # than the generic "required assessment format" when vision found nothing usable.
-            raise AssessmentDocValidationError(
-                detail=f"Hybrid vision extraction failed. {msg}",
-                public_message=(
-                    "We could not build quiz questions from this PDF yet. "
-                    "Try again, or upload a paper that contains questions "
-                    "(multiple-choice or written Q&A). Scanned pages are OK."
-                ),
-                reason="HYBRID_EXTRACT_FAILED",
-            ) from hybrid_exc
+            logger.warning(
+                "Hybrid extract failed for assessment %s (%s); trying content→MCQ generation",
+                assessment_id,
+                msg[:200],
+            )
+            batch_questions, gen_warnings = _generate_mcqs_from_document_content(
+                text=text,
+                pdf_bytes=pdf_bytes,
+                wanted=wanted,
+                title_hint=getattr(assessment, "title", None),
+                progress_callback=progress_callback,
+                user_id=user_id,
+            )
+            warnings.extend(gen_warnings)
+            warnings.append(f"Hybrid extract skipped after error: {msg[:180]}")
+            canonical_source_numbers = []
+            pair_answer_texts = [None] * len(batch_questions)
+            hybrid_conf = 0.8
+            hybrid_title = getattr(assessment, "title", None)
+            content_generated = True
 
-        warnings.extend(hybrid_warnings)
         extraction = _HybridExtractionShim(
             title=hybrid_title,
             confidence=hybrid_conf,
-            warnings=hybrid_warnings,
+            warnings=list(warnings),
         )
+
+        if not batch_questions and not content_generated:
+            logger.info(
+                "No exam MCQs in PDF for assessment %s; generating from document content",
+                assessment_id,
+            )
+            batch_questions, gen_warnings = _generate_mcqs_from_document_content(
+                text=text,
+                pdf_bytes=pdf_bytes,
+                wanted=wanted,
+                title_hint=getattr(assessment, "title", None) or hybrid_title,
+                progress_callback=progress_callback,
+                user_id=user_id,
+            )
+            warnings.extend(gen_warnings)
+            canonical_source_numbers = []
+            pair_answer_texts = [None] * len(batch_questions)
+            content_generated = True
+            extraction = _HybridExtractionShim(
+                title=hybrid_title or getattr(assessment, "title", None),
+                confidence=0.8,
+                warnings=list(warnings),
+            )
 
         if not batch_questions:
             raise AssessmentDocValidationError(
-                detail=(
-                    "Hybrid vision could not extract any MCQs from this PDF. "
-                    "Check that the file is a readable MCQ / diagnostic paper."
-                ),
+                detail="Neither hybrid extract nor content→MCQ generation produced questions",
                 public_message=(
-                    "No questions could be built from this PDF. "
-                    "Upload a document that contains exam/quiz questions "
-                    "(A–D options optional — open stems are completed by AI)."
+                    "We could not create quiz questions from this PDF. "
+                    "Upload a document with readable teaching content or exam questions."
                 ),
-                reason="NO_MCQS_EXTRACTED",
+                reason="NO_MCQS_BUILT",
             )
 
-        if wanted is not None and len(batch_questions) < wanted:
+        if wanted is not None and len(batch_questions) < wanted and not content_generated:
             warnings.append(
                 f"Hybrid vision produced {len(batch_questions)} of {wanted} "
-                "requested MCQs (no content top-up — hybrid only)."
+                "requested MCQs (content top-up not used because exam items were found)."
             )
 
-        canonical_used = bool(canonical_source_numbers)
+        canonical_used = bool(canonical_source_numbers) and not content_generated
+        if content_generated:
+            creation_mode = "pdf_content_generated"
         question_pdf_topics: dict[str, str] = {}
         question_concepts: dict[str, str] = {}
 
