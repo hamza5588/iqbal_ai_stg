@@ -112,6 +112,9 @@ def extract_target_questions(text, pdf_bytes=None):
         if not mappings:
             key_region = re.split(r"(?i)answer key", part)[-1] if re.search(r"(?i)answer key", part) else ""
             mappings = re.findall(r"\bQ(\d+)\s+([ABCD])\b", key_region)
+            if not mappings:
+                # Table key flattened one cell per line: "12 \n B \n Domain \n Topic ...".
+                mappings = re.findall(r"(?m)^\s*(\d+)\s*\n\s*([ABCD])\s*$", key_region)
         parse_text = part
         if mappings:
             key_start = re.search(r"(?im)^.*ANSWER KEY.*$", part)

@@ -232,6 +232,16 @@ def shuffle_options(
     return shuffled, new_correct
 
 
+def _is_variable_option(body: str, label: str, opts: List[dict], stem_lines: List[str]) -> bool:
+    """A lone lowercase letter that is the next expected option and a variable in the stem."""
+    import unicodedata
+
+    if not re.fullmatch(r"[a-z]", body) or len(opts) != LABELS.index(label):
+        return False
+    stem = unicodedata.normalize("NFKC", "\n".join(stem_lines))
+    return bool(re.search(rf"(?<![A-Za-z]){body}(?![A-Za-z])", stem))
+
+
 def split_stem_and_options(text: str) -> Tuple[str, List[dict]]:
     """If a question stem contains A./B./C./D. lines, split them into options."""
     if not text:
@@ -253,6 +263,10 @@ def split_stem_and_options(text: str) -> Tuple[str, List[dict]]:
         if match:
             label = match.group(1).upper()
             body = strip_option_label_prefix((match.group(2) or "").strip())
+            if body and _is_variable_option(body, label, opts, stem_lines):
+                # "C. a" where the stem uses the variable a (e.g. log_a(a)): content, not a stray label.
+                opts.append({"label": label, "text": rf"\({body}\)", "latex": None})
+                continue
             if body and is_label_only(body):
                 if opts:
                     opts[-1]["text"] = (opts[-1]["text"] + " " + stripped).strip()
