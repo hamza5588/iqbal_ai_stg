@@ -133,6 +133,71 @@ def vision_mcq_to_question(mcq) -> Optional[MCQQuestion]:
 persor_mcq_to_question = vision_mcq_to_question
 
 
+def _source_number(raw, fallback: int) -> int:
+    try:
+        return int(getattr(raw, "question_no"))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _llm_complete_hybrid_mcq(raw) -> Optional[MCQQuestion]:
+    """Turn an incomplete hybrid extract into a full MCQ (open-ended / partial A–D / no key).
+
+    Non-standard papers often yield a stem without four options or without an answer-key
+    letter. Upload still succeeds: the Q→MCQ converter builds a valid item from whatever
+    the vision pass recovered.
+    """
+    from app.services.quiz.mcq_converter import convert_pair_to_mcq
+    from app.services.quiz.models import ExtractedOption, QuestionAnswerPair
+
+    stem = (getattr(raw, "question", None) or "").strip()
+    if not stem:
+        return None
+
+    correct = (getattr(raw, "correct_answer", None) or "").strip().upper()[:1]
+    answer_text = ""
+    extracted_opts: List[ExtractedOption] = []
+    for idx, opt in enumerate(list(getattr(raw, "options", None) or [])):
+        label = _option_label(getattr(opt, "label", "") or "", idx)
+        text = (getattr(opt, "text", None) or "").strip()
+        if not text:
+            continue
+        if label:
+            extracted_opts.append(ExtractedOption(label=label, text=text))
+        if label and label == correct:
+            answer_text = text
+
+    if not answer_text and correct in ("A", "B", "C", "D"):
+        answer_text = f"Option {correct}"
+    if not answer_text:
+        answer_text = (
+            "Derive the correct answer from the question stem and provide four "
+            "multiple-choice options (A–D) with one correct choice."
+        )
+
+    pair = QuestionAnswerPair(
+        question_number=getattr(raw, "question_no", 1) or 1,
+        question_text=stem,
+        answer_text=answer_text,
+        options=extracted_opts,
+        correct_option_label=correct if correct in ("A", "B", "C", "D") else None,
+    )
+    mcq = convert_pair_to_mcq(pair)
+    topic = (getattr(raw, "topic", None) or "").strip() or None
+    domain = (getattr(raw, "domain", None) or "").strip() or None
+    cognitive = (getattr(raw, "cognitive_level", None) or "").strip() or None
+    if topic and not mcq.topic:
+        mcq.topic = topic
+    if domain and not mcq.domain:
+        mcq.domain = domain
+    if cognitive and not mcq.cognitive_level:
+        mcq.cognitive_level = cognitive
+    if domain or topic:
+        mcq.learning_concept = mcq.learning_concept or domain or topic
+    mcq.conversion_confidence = min(float(mcq.conversion_confidence or 0.85), 0.88)
+    return mcq
+
+
 def extract_mcqs_hybrid_vision(
     pdf_bytes: bytes,
     *,
@@ -181,6 +246,7 @@ def extract_mcqs_hybrid_vision(
     source_numbers: List[int] = []
     answer_letters: List[Optional[str]] = []
     skipped = 0
+    incomplete_raws = []
 
     for raw in list(getattr(result, "questions", None) or []):
         qno = getattr(raw, "question_no", "?")
@@ -188,11 +254,13 @@ def extract_mcqs_hybrid_vision(
             mapped = vision_mcq_to_question(raw)
         except Exception as exc:  # noqa: BLE001 - keep remaining MCQs
             skipped += 1
+            incomplete_raws.append(raw)
             warnings.append(f"Q{qno}: skipped ({exc})")
             logger.warning("Hybrid MCQ convert failed for Q%s: %s", qno, exc)
             continue
         if mapped is None:
             skipped += 1
+            incomplete_raws.append(raw)
             ans = getattr(raw, "correct_answer", None)
             if require_answers and not ans:
                 warnings.append(f"Q{qno}: skipped (no answer key letter)")
@@ -200,10 +268,7 @@ def extract_mcqs_hybrid_vision(
                 warnings.append(f"Q{qno}: skipped (incomplete options/answer)")
             continue
         questions.append(mapped)
-        try:
-            source_numbers.append(int(getattr(raw, "question_no")))
-        except (TypeError, ValueError):
-            source_numbers.append(len(source_numbers) + 1)
+        source_numbers.append(_source_number(raw, len(source_numbers) + 1))
         answer_letters.append(
             (getattr(raw, "correct_answer", None) or mapped.correct_option_label)
         )
@@ -211,10 +276,32 @@ def extract_mcqs_hybrid_vision(
     if skipped:
         warnings.append(f"Skipped {skipped} incomplete question(s) after hybrid extract.")
 
+    # Accept non-standard layouts: complete incomplete hybrid extracts into valid MCQs.
+    if not questions and incomplete_raws:
+        _progress("extract", 72, "Completing partial questions into MCQs...")
+        warnings.append(
+            f"LLM-completing {len(incomplete_raws)} incomplete hybrid question(s) "
+            "(non-standard paper layout)."
+        )
+        for raw in incomplete_raws:
+            qno = getattr(raw, "question_no", "?")
+            try:
+                completed = _llm_complete_hybrid_mcq(raw)
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"Q{qno}: LLM complete failed ({exc})")
+                logger.warning("LLM complete failed for hybrid Q%s: %s", qno, exc)
+                continue
+            if not completed:
+                warnings.append(f"Q{qno}: LLM complete returned empty")
+                continue
+            questions.append(completed)
+            source_numbers.append(_source_number(raw, len(source_numbers) + 1))
+            answer_letters.append(completed.correct_option_label)
+
     if not questions:
         raise ValueError(
             "Hybrid vision extraction returned no usable MCQs "
-            "(need stem, A-D options, and answer-key letter)."
+            "(need at least one question stem that can become A–D options)."
         )
 
     title = (getattr(result, "title", None) or "").strip() or None

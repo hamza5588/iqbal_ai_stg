@@ -364,8 +364,16 @@ def run_pdf_quiz_pipeline(
                     "read right now. The document was NOT rejected - please try the upload again in a "
                     "few minutes."
                 ) from hybrid_exc
+            # Keep the real extraction detail for logs; show a clearer teacher message
+            # than the generic "required assessment format" when vision found nothing usable.
             raise AssessmentDocValidationError(
-                detail=f"Hybrid vision extraction failed. {msg}"
+                detail=f"Hybrid vision extraction failed. {msg}",
+                public_message=(
+                    "We could not build quiz questions from this PDF yet. "
+                    "Try again, or upload a paper that contains questions "
+                    "(multiple-choice or written Q&A). Scanned pages are OK."
+                ),
+                reason="HYBRID_EXTRACT_FAILED",
             ) from hybrid_exc
 
         warnings.extend(hybrid_warnings)
@@ -380,7 +388,13 @@ def run_pdf_quiz_pipeline(
                 detail=(
                     "Hybrid vision could not extract any MCQs from this PDF. "
                     "Check that the file is a readable MCQ / diagnostic paper."
-                )
+                ),
+                public_message=(
+                    "No questions could be built from this PDF. "
+                    "Upload a document that contains exam/quiz questions "
+                    "(A–D options optional — open stems are completed by AI)."
+                ),
+                reason="NO_MCQS_EXTRACTED",
             )
 
         if wanted is not None and len(batch_questions) < wanted:
