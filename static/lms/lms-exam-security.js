@@ -20,11 +20,17 @@
   };
 
   function api(path, opts) {
-    if (typeof lmsApi === 'function') return lmsApi(path, opts);
+    // lmsApi expects a full /api/lms/... URL (same as student-quiz / teacher panels).
+    // Relative "/attempts/..." 404s, so the UI can show EXAM LOCKED locally while the
+    // server never locks — teacher then has no Unlock button.
+    // Always send JSON Content-Type: without it Flask get_json() is empty and
+    // security-events become event_type="other" (no strict lock).
+    var url = path.indexOf('/api/') === 0 ? path : '/api/lms' + path;
     opts = opts || {};
-    opts.credentials = 'same-origin';
     opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-    return fetch('/api/lms' + path, opts).then(function (r) {
+    if (typeof lmsApi === 'function') return lmsApi(url, opts);
+    opts.credentials = 'same-origin';
+    return fetch(url, opts).then(function (r) {
       return r.json().then(function (j) {
         var payload = (j && j.data != null) ? j.data : j;
         if (!r.ok) {
@@ -159,6 +165,11 @@
     });
   }
 
+  function isLeaveEventType(eventType) {
+    return eventType === 'tab_hidden' || eventType === 'window_blur' ||
+      eventType === 'fullscreen_exit' || eventType === 'focus_loss';
+  }
+
   function flushQueue() {
     if (!state.eventQueue.length || !state.attemptId) return;
     var batch = state.eventQueue.splice(0, state.eventQueue.length);
@@ -187,8 +198,17 @@
       if (!d) return;
       state.syncState = 'saved';
       updateSyncBadge();
-      flushQueue();
+      // Apply unlock/lock first. Never flush queued leave events after a teacher
+      // unlock — that used to immediately re-lock the attempt.
       handleServerLock(d);
+      var teacherUnlock = d.unlocked === true || d.exam_unlocked === true;
+      var serverLocked = !!(d.is_locked || d.status === 'locked' || d.locked);
+      if (teacherUnlock || !serverLocked) {
+        state.eventQueue = state.eventQueue.filter(function (item) {
+          return !isLeaveEventType(item.eventType);
+        });
+      }
+      if (!serverLocked) flushQueue();
     }).catch(function () {
       state.syncState = 'offline';
       updateSyncBadge();

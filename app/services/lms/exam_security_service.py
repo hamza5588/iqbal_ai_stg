@@ -455,7 +455,26 @@ def unlock_attempt(
         raise LMSValidationError("Cannot unlock an abandoned attempt.")
     if attempt.status != "locked":
         # Idempotent unlock of already-active attempt.
+        # Still rotate the session token so a client that showed a local
+        # fail-closed EXAM LOCKED overlay (server never locked) can clear via heartbeat.
         if attempt.status == "in_progress":
+            attempt.session_token = new_session_token()
+            db.add(
+                ExamSecurityEvent(
+                    attempt_id=attempt.id,
+                    student_id=attempt.student_id,
+                    assessment_id=attempt.assessment_id,
+                    event_type="exam_unlocked",
+                    severity="info",
+                    verified=True,
+                    message=(message or "Teacher unlock (idempotent — was not locked)")[:512],
+                    context_json=json.dumps(
+                        {"teacher_id": teacher_id, "action": "unlock_idempotent"}, default=str
+                    )[:4000],
+                )
+            )
+            db.commit()
+            db.refresh(attempt)
             return attempt
         raise LMSValidationError("Attempt is not locked.")
     attempt.status = "in_progress"
