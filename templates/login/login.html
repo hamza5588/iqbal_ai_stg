@@ -20,7 +20,7 @@
     font-family:'Inter', 'Segoe UI', Arial, sans-serif;
     background:
       linear-gradient(160deg, var(--green-light), var(--green-50)),
-      url('{{ url_for('static', filename='images/forgot-password-bg.jpg') }}') center/cover no-repeat fixed;
+      url('{{ url_for('static', filename='images/forgot-password-bg.jpg') }}?v=n1123') center/cover no-repeat fixed;
     color:var(--text-dark);
   }
   h1, h2, .join-card h2{
@@ -424,7 +424,7 @@
     .panel{ min-height:auto; }
   }
 </style>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}?v=analytics-btn-1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/iqbal-new-ui.css') }}?v=analytics-btn-1-n1123">
 </head>
 <body class="nu-page nu-auth nu-login">
 
@@ -435,7 +435,7 @@
     </div>
     <div class="header-actions">
       <a class="btn btn-upload"
-         href="{{ url_for('static', filename='dashboard/iqbalai-teacher-analytics.html') }}"
+         href="{{ url_for('static', filename='dashboard/iqbalai-teacher-analytics.html') }}?v=n1123"
          title="Open Analytics upload dashboard">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
           <path d="M12 16V4"/>

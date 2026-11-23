@@ -1,7 +1,7 @@
 {% set td_username = session.get('full_name') or session.get('username') or 'Teacher' %}
 <header class="td-topbar">
   <a class="td-brand" href="#lessons" onclick="tdShowView('lessons'); return false;" aria-label="Iqbal AI — Teacher Dashboard">
-    <img src="{{ url_for('static', filename='teacher/icons/iqbal-ai-logo.png') }}" alt="IQBAL AI — Intelligent Learning Platform">
+    <img src="{{ url_for('static', filename='teacher/icons/iqbal-ai-logo.png') }}?v=n1123" alt="IQBAL AI — Intelligent Learning Platform">
   </a>
   {% include 'teacher/partials/mainnav.html' %}
   <div class="td-top-right">

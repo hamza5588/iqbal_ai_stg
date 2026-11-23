@@ -3,7 +3,7 @@
 
 <head>
     {% include 'partials/platform_theme_head.html' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}?v=n1123">
   <script>
     tailwind.config = {
       theme: {
@@ -1032,7 +1032,7 @@
       <div class="flex justify-between items-center">
                 {% with variant='dark-on-light', height='32px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
                 <button onclick="hideSidebar()" class="mt-2 sm:mt-4 hover:bg-gray-100 p-1 rounded">
-          <img src="{{ url_for('static', filename='images/slider.png') }}" alt="">
+          <img src="{{ url_for('static', filename='images/slider.png') }}?v=n1123" alt="">
         </button>
       </div>
       
@@ -1045,7 +1045,7 @@
         <!-- New Chat -->
                 <button onclick="startNewChat()"
                     class="w-full max-w-[180px] sm:max-w-[200px] lg:max-w-[230px] h-10 sm:h-12 lg:h-[50px] mt-2 sm:mt-3 mb-1 sm:mb-2 px-3 sm:px-4 flex items-center justify-center gap-2 bg-[#05B0FC] text-white text-sm sm:text-base font-bold rounded transition duration-200 ease-in-out hover:bg-blue-600">
-          <img src="{{ url_for('static', filename='images/msg.png') }}" alt="">
+          <img src="{{ url_for('static', filename='images/msg.png') }}?v=n1123" alt="">
           <span>New Chat</span>
         </button>
 
@@ -1054,7 +1054,7 @@
                 <button onclick="openLessonGenerator()"
                     class="hidden w-full max-w-[140px] sm:max-w-[160px] lg:max-w-[180px] h-6 sm:h-7 lg:h-8 px-2 flex items-center gap-1.5 font-semibold text-xs text-gray-700 hover:bg-gray-50 rounded transition-colors"
                     id="generateLessonBtn">
-                    <img src="{{ url_for('static', filename='images/lesson.png') }}" alt="" class="w-3.5 h-3.5">
+                    <img src="{{ url_for('static', filename='images/lesson.png') }}?v=n1123" alt="" class="w-3.5 h-3.5">
           <span>Generate Lessons</span>
         </button>
         {% endif %}
@@ -1063,7 +1063,7 @@
                 <button onclick="openViewLessons()"
                     class="w-full max-w-[140px] sm:max-w-[160px] lg:max-w-[180px] h-6 sm:h-7 lg:h-8 px-2 flex items-center gap-1.5 font-semibold text-xs text-gray-700 hover:bg-gray-50 rounded transition-colors"
                     id="viewLessonsBtn">
-                    <img src="{{ url_for('static', filename='images/lesson.png') }}" alt="" class="w-3.5 h-3.5">
+                    <img src="{{ url_for('static', filename='images/lesson.png') }}?v=n1123" alt="" class="w-3.5 h-3.5">
           <span id="viewLessonsLabel">View Lessons</span>
         </button>
 
@@ -1236,12 +1236,12 @@
             <div class="flex items-center gap-2 sm:gap-3">
                 <button onclick="toggleVoiceRecording()" id="micButton"
                     class="w-10 h-10 sm:w-12 sm:h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
-                    <img src="{{ url_for('static', filename='images/recorder.png') }}" alt=""
+                    <img src="{{ url_for('static', filename='images/recorder.png') }}?v=n1123" alt=""
                         class="w-5 h-5 sm:w-6 sm:h-6">
             </button>
                 <button onclick="toggleVoiceOutput()" id="voiceOutputBtn"
                     class="w-10 h-10 sm:w-12 sm:h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
-                    <img src="{{ url_for('static', filename='images/voice.png') }}" alt=""
+                    <img src="{{ url_for('static', filename='images/voice.png') }}?v=n1123" alt=""
                         class="w-5 h-5 sm:w-6 sm:h-6">
             </button>
             
@@ -1283,7 +1283,7 @@
             
                 <button onclick="sendMessage()"
                     class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-xl flex items-center justify-center hover:bg-blue-600 transition-colors">
-                    <img src="{{ url_for('static', filename='images/sender.png') }}" alt=""
+                    <img src="{{ url_for('static', filename='images/sender.png') }}?v=n1123" alt=""
                         class="w-5 h-5 sm:w-6 sm:h-6">
             </button>
         </div>
@@ -9950,7 +9950,7 @@ async function initializeApp() {
             <div class="flex justify-between items-center">
                 {% with variant='dark-on-light', height='32px' %}{% include 'partials/iqbal_logo.html' %}{% endwith %}
                 <button onclick="hideSidebar()" class="mt-2 sm:mt-4 hover:bg-gray-100 p-1 rounded">
-                    <img src="{{ url_for('static', filename='images/slider.png') }}" alt="">
+                    <img src="{{ url_for('static', filename='images/slider.png') }}?v=n1123" alt="">
                 </button>
             </div>
             
@@ -9961,21 +9961,21 @@ async function initializeApp() {
 
                 <!-- New Chat -->
                 <button onclick="startNewChat()" class="w-full max-w-[140px] sm:max-w-[160px] lg:max-w-[180px] h-8 sm:h-9 lg:h-10 mt-1 mb-1 px-2 flex items-center justify-center gap-1.5 bg-[#05B0FC] text-white text-xs font-bold rounded transition duration-200 ease-in-out hover:bg-blue-600">
-                    <img src="{{ url_for('static', filename='images/msg.png') }}" alt="" class="w-3.5 h-3.5">
+                    <img src="{{ url_for('static', filename='images/msg.png') }}?v=n1123" alt="" class="w-3.5 h-3.5">
                     <span>New Chat</span>
                 </button>
 
                 <!-- Action Buttons - Only visible to teachers and admins -->
                 {% if can_view_my_lessons() %}
                 <button onclick="openLessonGenerator()" class="hidden w-full max-w-[140px] sm:max-w-[160px] lg:max-w-[180px] h-6 sm:h-7 lg:h-8 px-2 flex items-center gap-1.5 font-semibold text-xs text-gray-700 hover:bg-gray-50 rounded transition-colors" id="generateLessonBtn">
-                    <img src="{{ url_for('static', filename='images/lesson.png') }}" alt="" class="w-3.5 h-3.5">
+                    <img src="{{ url_for('static', filename='images/lesson.png') }}?v=n1123" alt="" class="w-3.5 h-3.5">
                     <span>Generate Lessons</span>
                 </button>
                 {% endif %}
 
                 <!-- View Lessons Button in Sidebar -->
                 <button onclick="openViewLessons()" class="w-full max-w-[140px] sm:max-w-[160px] lg:max-w-[180px] h-6 sm:h-7 lg:h-8 px-2 flex items-center gap-1.5 font-semibold text-xs text-gray-700 hover:bg-gray-50 rounded transition-colors" id="viewLessonsBtn">
-                    <img src="{{ url_for('static', filename='images/lesson.png') }}" alt="" class="w-3.5 h-3.5">
+                    <img src="{{ url_for('static', filename='images/lesson.png') }}?v=n1123" alt="" class="w-3.5 h-3.5">
                     <span id="viewLessonsLabel">View Lessons</span>
                 </button>
 
@@ -14366,8 +14366,8 @@ async function initializeApp() {
   </script>
 
   {# ── Consultant Chatbot Widget ── #}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/consultant-widget.css') }}">
-  <script src="{{ url_for('static', filename='js/consultant-widget.js') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/consultant-widget.css') }}?v=n1123">
+  <script src="{{ url_for('static', filename='js/consultant-widget.js') }}?v=n1123" defer></script>
 
 </body>
 

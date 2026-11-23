@@ -5,7 +5,7 @@
 {% block main_class %}ad-main--wide{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='admin/css/pdf-extraction-inspector.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='admin/css/pdf-extraction-inspector.css') }}?v=n1123">
 {% endblock %}
 
 {% block content %}
@@ -108,5 +108,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='admin/js/pdf-extraction-inspector.js') }}"></script>
+<script src="{{ url_for('static', filename='admin/js/pdf-extraction-inspector.js') }}?v=n1123"></script>
 {% endblock %}

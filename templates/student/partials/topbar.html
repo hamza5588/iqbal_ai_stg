@@ -1,7 +1,7 @@
 {% set sd_username = session.get('full_name') or session.get('username') or 'Student' %}
 <header class="sd-topbar">
   <a class="sd-brand" href="#diagnostic" onclick="sdShowView('diagnostic'); return false;" aria-label="Iqbal AI — Student Dashboard">
-    <img src="{{ url_for('static', filename='student/icons/iqbal-ai-logo.png') }}" alt="IQBAL AI — Intelligent Learning Platform">
+    <img src="{{ url_for('static', filename='student/icons/iqbal-ai-logo.png') }}?v=n1123" alt="IQBAL AI — Intelligent Learning Platform">
   </a>
   {% include 'student/partials/mainnav.html' %}
   <div class="sd-top-right">

@@ -5,14 +5,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>{% block title %}Student Dashboard | Iqbal AI{% endblock %}</title>
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='student/icons/iqbal-ai-logo.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='student/icons/iqbal-ai-logo.png') }}?v=n1123">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-scale.css') }}?v=n1123">
 
   {% include 'partials/platform_theme_head.html' %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/markdown-styles.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='teacher/css/markdown-styles.css') }}?v=n1123" />
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
-  <script src="{{ url_for('static', filename='js/in-app-confirm.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/in-app-confirm.js') }}?v=n1123"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@14/lib/marked.umd.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
@@ -21,17 +21,17 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   {# Lesson content / lesson chat formatting pipeline (same as the old student page). #}
-  <script src="{{ url_for('static', filename='teacher/js/chat-response-formatter.js') }}?v=20261122dollar1"></script>
-  <script src="{{ url_for('static', filename='teacher/js/markdown-parser.js') }}"></script>
-  <script src="{{ url_for('static', filename='teacher/js/backend-formatter.js') }}"></script>
-  <script src="{{ url_for('static', filename='teacher/js/markdown-examples.js') }}"></script>
+  <script src="{{ url_for('static', filename='teacher/js/chat-response-formatter.js') }}?v=20261122dollar1-n1123"></script>
+  <script src="{{ url_for('static', filename='teacher/js/markdown-parser.js') }}?v=n1123"></script>
+  <script src="{{ url_for('static', filename='teacher/js/backend-formatter.js') }}?v=n1123"></script>
+  <script src="{{ url_for('static', filename='teacher/js/markdown-examples.js') }}?v=n1123"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}?v=20261121ur1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='student/css/student-dashboard.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='lms/scenario.css') }}?v=20261117sba1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/lms-ui.css') }}?v=20261121ur1-n1123">
+  <link rel="stylesheet" href="{{ url_for('static', filename='student/css/student-dashboard.css') }}?v=n1123">
+  <link rel="stylesheet" href="{{ url_for('static', filename='lms/scenario.css') }}?v=20261117sba1-n1123">
 
   <!-- MathJax v3: TeX delimiters, skip code blocks, no automatic typeset -->
   <script>
@@ -73,14 +73,14 @@
   </script>
   {# Light-only design: opt out of OS/browser dark mode (must stay LAST in <head>, after every stylesheet). #}
   <meta name="color-scheme" content="only light">
-  <script src="{{ url_for('static', filename='js/force-light-theme.js') }}?v=20261004a"></script>
+  <script src="{{ url_for('static', filename='js/force-light-theme.js') }}?v=20261004a-n1123"></script>
 </head>
 
 <body class="sd-body">
   <div id="toastContainer" class="sd-toasts" aria-live="polite"></div>
 
   <div id="loading-overlay" class="sd-loading-overlay">
-    <img src="{{ url_for('static', filename='student/icons/iqbal-ai-logo.png') }}" alt="IQBAL AI">
+    <img src="{{ url_for('static', filename='student/icons/iqbal-ai-logo.png') }}?v=n1123" alt="IQBAL AI">
     <div class="sd-spinner"></div>
     <p class="sd-loading-text">Loading Student Dashboard...</p>
   </div>
@@ -93,20 +93,20 @@
   {% include 'student/partials/modals.html' %}
 
   {# Order: shell helpers (escapeHtml, toasts) → shared LMS core/panels → student LMS flows → screen modules. #}
-  <script src="{{ url_for('static', filename='student/js/student-shell.js') }}?v=20261117sba1"></script>
-  <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261121ur1"></script>
-  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}?v=20261109qtime1"></script>
-  <script src="{{ url_for('static', filename='lms/lms-student.js') }}?v=20261109qtime1"></script>
-  <script src="{{ url_for('static', filename='lms/lms-deficiency-chat.js') }}?v=20261123lc1"></script>
-  <script src="{{ url_for('static', filename='student/js/student-quiz.js') }}?v=20261109qtime1"></script>
-  <script src="{{ url_for('static', filename='student/js/student-lessons.js') }}"></script>
-  <script src="{{ url_for('static', filename='student/js/student-diagnostic.js') }}"></script>
-  <script src="{{ url_for('static', filename='student/js/student-learning-path.js') }}?v=20261112aigp1"></script>
-  <script src="{{ url_for('static', filename='student/js/student-classes.js') }}"></script>
-  <script src="{{ url_for('static', filename='student/js/student-ai-guided-practice.js') }}?v=20261121bank1"></script>
-  <script src="{{ url_for('static', filename='student/js/student-scenario.js') }}?v=20261117sba1"></script>
-  <script src="{{ url_for('static', filename='student/js/student-tutor.js') }}"></script>
-  <script src="{{ url_for('static', filename='student/js/tutor-usage.js') }}?v=20261022usage1"></script>
+  <script src="{{ url_for('static', filename='student/js/student-shell.js') }}?v=20261117sba1-n1123"></script>
+  <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261121ur1-n1123"></script>
+  <script src="{{ url_for('static', filename='lms/lms-panels.js') }}?v=20261109qtime1-n1123"></script>
+  <script src="{{ url_for('static', filename='lms/lms-student.js') }}?v=20261109qtime1-n1123"></script>
+  <script src="{{ url_for('static', filename='lms/lms-deficiency-chat.js') }}?v=20261123lc1-n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-quiz.js') }}?v=20261109qtime1-n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-lessons.js') }}?v=n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-diagnostic.js') }}?v=n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-learning-path.js') }}?v=20261112aigp1-n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-classes.js') }}?v=n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-ai-guided-practice.js') }}?v=20261121bank1-n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-scenario.js') }}?v=20261117sba1-n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/student-tutor.js') }}?v=n1123"></script>
+  <script src="{{ url_for('static', filename='student/js/tutor-usage.js') }}?v=20261022usage1-n1123"></script>
   {% block scripts %}{% endblock %}
 </body>
 

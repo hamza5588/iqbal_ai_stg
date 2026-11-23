@@ -2,11 +2,11 @@
     <div class="flex items-center gap-2 sm:gap-3">
         <button onclick="toggleVoiceRecording()" id="micButton"
             class="w-10 h-10 sm:w-12 sm:h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
-            <img src="{{ url_for('static', filename='images/recorder.png') }}" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
+            <img src="{{ url_for('static', filename='images/recorder.png') }}?v=n1123" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
         </button>
         <button onclick="toggleVoiceOutput()" id="voiceOutputBtn"
             class="w-10 h-10 sm:w-12 sm:h-12 border border-gray-200 rounded-xl flex items-center justify-center hover:bg-gray-50 transition-colors">
-            <img src="{{ url_for('static', filename='images/voice.png') }}" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
+            <img src="{{ url_for('static', filename='images/voice.png') }}?v=n1123" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
         </button>
 
         <div class="flex-1 relative">
@@ -17,7 +17,7 @@
 
         <button onclick="sendMessage()"
             class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-xl flex items-center justify-center hover:bg-blue-600 transition-colors">
-            <img src="{{ url_for('static', filename='images/sender.png') }}" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
+            <img src="{{ url_for('static', filename='images/sender.png') }}?v=n1123" alt="" class="w-5 h-5 sm:w-6 sm:h-6">
         </button>
     </div>
 
