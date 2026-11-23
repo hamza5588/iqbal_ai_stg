@@ -15,6 +15,10 @@ from zoneinfo import ZoneInfo
 import zipfile
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.comments import Comment
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.hyperlink import Hyperlink
 from sqlalchemy import and_, func, or_
 
 from app.models.database_models import SystemSettings, TutorDailyUsage, User
@@ -1074,6 +1078,303 @@ def _safe_text_cells(ws):
                 cell.data_type = "s"
 
 
+# ── Readable, linked sheets (Summary / Students / Answers / Topic Scores / Daily Learning) ──
+# The long sheet above stays as-is (last tab) for the Analytics upload; the dashboard reads only
+# that sheet. Everything below is derived from the same rows so the numbers always agree.
+SUMMARY_SHEET = "Summary"
+STUDENTS_SHEET = "Students"
+ANSWERS_SHEET = "Answers"
+TOPICS_SHEET = "Topic Scores"
+DAILY_SHEET = "Daily Learning"
+_HEADER_FILL = PatternFill("solid", fgColor="1F3864")
+_HEADER_FONT = Font(bold=True, color="FFFFFF")
+_LINK_FONT = Font(color="0563C1", underline="single")
+_TITLE_FONT = Font(bold=True, size=14, color="1F3864")
+_GOOD_FILL = PatternFill("solid", fgColor="E2EFDA")
+_BAD_FILL = PatternFill("solid", fgColor="FCE4E4")
+_DAY_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\s*:\s*(.*)$")
+_DAY_TOTAL_RE = re.compile(r"total\s+([\d.]+)")
+
+
+def _style_header(ws, row_number: int):
+    for cell in ws[row_number]:
+        if cell.value is not None:
+            cell.fill = _HEADER_FILL
+            cell.font = _HEADER_FONT
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+    ws.row_dimensions[row_number].height = 32
+
+
+def _link(cell, sheet: str, row: int, text=None):
+    if text is not None:
+        cell.value = text
+    # In-workbook link (location, not an external target) so Excel/LibreOffice jump between tabs.
+    cell.hyperlink = Hyperlink(ref=cell.coordinate, location=f"'{sheet}'!A{row}", display=str(cell.value or ""))
+    cell.font = _LINK_FONT
+
+
+def _widths(ws, widths: dict):
+    for letter, width in widths.items():
+        ws.column_dimensions[letter].width = width
+
+
+def _back_link(ws, title: str):
+    ws["A1"] = title
+    ws["A1"].font = _TITLE_FONT
+    _link(ws["A2"], SUMMARY_SHEET, 1, "← Back to Summary")
+
+
+def _num(value):
+    if isinstance(value, (int, float)):
+        return value
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_daily_detail(text) -> list[tuple[str, float | None, str]]:
+    """'2026-10-23: chat 0:20:23, practice 0:03:00, total 20.38 (partial day); 2026-10-24: 0' →
+    [(day, minutes, note)]."""
+    days = []
+    for part in str(text or "").split(";"):
+        match = _DAY_RE.match(part.strip())
+        if not match:
+            continue
+        body = match.group(2)
+        total = _DAY_TOTAL_RE.search(body)
+        minutes = 0.0 if re.match(r"^0\b", body) else (float(total.group(1)) if total else None)
+        notes = re.findall(r"\(([^)]*)\)|\[([^\]]*)\]", body)
+        days.append((match.group(1), minutes, "; ".join(a or b for a, b in notes)))
+    return days
+
+
+def _collect_students(rows) -> list[dict]:
+    """Group the long rows into one record per student (first appearance order)."""
+    students: dict[str, dict] = {}
+    for row in rows:
+        values = list(row) + [None] * max(0, len(QUIZ_HEADERS) - len(row))
+        name, email = values[0], values[1]
+        if name in (None, "") and email in (None, ""):
+            continue
+        key = str(email or name).strip().lower()
+        record = students.get(key)
+        if record is None:
+            record = students[key] = {"base": values[:20], "answers": []}
+        if values[20] not in (None, ""):
+            record["answers"].append(values[20:28])
+    return list(students.values())
+
+
+def _add_readable_sheets(workbook, raw_title: str, rows, file_data):
+    students = _collect_students(rows or [])
+    summary = workbook.create_sheet(SUMMARY_SHEET)
+    st_ws = workbook.create_sheet(STUDENTS_SHEET)
+    an_ws = workbook.create_sheet(ANSWERS_SHEET)
+    tp_ws = workbook.create_sheet(TOPICS_SHEET)
+    has_daily = any(s["base"][19] for s in students)
+    dl_ws = workbook.create_sheet(DAILY_SHEET) if has_daily else None
+
+    # Row positions are planned first so every sheet can link to every other.
+    student_row = {i: 5 + i for i in range(len(students))}
+    answer_row, topic_row, daily_row = {}, {}, {}
+    next_answer, next_topic = 5, 5
+    topic_rows_by_student = []
+    for i, student in enumerate(students):
+        answer_row[i] = next_answer
+        next_answer += max(1, len(student["answers"]))
+        agg: dict[tuple, list] = {}
+        for answer in student["answers"]:
+            key = (answer[1] or "", answer[2] or "")
+            bucket = agg.setdefault(key, [0, 0, 0])
+            bucket[1] += 1
+            if str(answer[6] or "").strip().lower() in ("yes", "true", "1", "✓"):
+                bucket[0] += 1
+            bucket[2] += _num(answer[7]) or 0
+        topic_rows_by_student.append(agg)
+        topic_row[i] = next_topic
+        next_topic += max(1, len(agg))
+        daily_row[i] = 5 + i
+
+    # ── Students ──
+    _back_link(st_ws, "Students — one row per student")
+    st_headers = [
+        "Student Name", "Email", "School", "Test Name", "Total Questions", "Correct", "Incorrect",
+        "Score %", "Quiz Time (Minutes)", "Quiz Page Opens", "Time Away (Minutes)",
+        "Learning Chat Time", "AI-Guided Practice Time", "Total Active Minutes", "Days Learned",
+        "Student ID", "Answers", "Topic Scores",
+    ] + (["Daily Learning"] if dl_ws else [])
+    st_ws.append([])
+    st_ws.append(st_headers)
+    _style_header(st_ws, 4)
+    for i, student in enumerate(students):
+        b = student["base"]
+        r = student_row[i]
+        st_ws.append([b[0], b[1], b[2], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13],
+                      b[14], b[15], b[16], b[17], b[18]])
+        _link(st_ws.cell(r, 1), ANSWERS_SHEET, answer_row[i])
+        _link(st_ws.cell(r, 17), ANSWERS_SHEET, answer_row[i], "View answers →")
+        _link(st_ws.cell(r, 18), TOPICS_SHEET, topic_row[i], "View topics →")
+        if dl_ws:
+            _link(st_ws.cell(r, 19), DAILY_SHEET, daily_row[i], "View days →")
+        st_ws.cell(r, 8).number_format = "0.0%"
+        score = _num(b[10])
+        if score is not None:
+            st_ws.cell(r, 8).fill = _GOOD_FILL if score >= 0.5 else _BAD_FILL
+    st_ws.freeze_panes = "B5"
+    if students:
+        st_ws.auto_filter.ref = f"A4:P{4 + len(students)}"
+    _widths(st_ws, {"A": 24, "B": 32, "C": 18, "D": 28, "L": 14, "M": 14, "Q": 16, "R": 15, "S": 14})
+
+    # ── Answers ──
+    _back_link(an_ws, "Answers — every question each student answered")
+    an_ws.append([])
+    an_ws.append(["Student Name", "Question No", "Domain", "Topic", "Question", "Student Selected",
+                  "Correct Answer", "Is Correct", "Question Time (Seconds)"])
+    _style_header(an_ws, 4)
+    for i, student in enumerate(students):
+        name = student["base"][0]
+        if not student["answers"]:
+            an_ws.append([name, "(no answers recorded)"])
+            _link(an_ws.cell(answer_row[i], 1), STUDENTS_SHEET, student_row[i])
+            continue
+        for offset, answer in enumerate(student["answers"]):
+            r = answer_row[i] + offset
+            an_ws.append([name] + list(answer))
+            _link(an_ws.cell(r, 1), STUDENTS_SHEET, student_row[i])
+            an_ws.cell(r, 5).alignment = Alignment(wrap_text=True, vertical="top")
+            correct = str(answer[6] or "").strip().lower() in ("yes", "true", "1", "✓")
+            an_ws.cell(r, 8).fill = _GOOD_FILL if correct else _BAD_FILL
+    an_ws.freeze_panes = "B5"
+    if next_answer > 5:
+        an_ws.auto_filter.ref = f"A4:I{next_answer - 1}"
+    _widths(an_ws, {"A": 24, "B": 11, "C": 18, "D": 30, "E": 60, "F": 12, "G": 12, "H": 10, "I": 12})
+
+    # ── Topic Scores ──
+    _back_link(tp_ws, "Topic Scores — per student, per topic")
+    tp_ws.append([])
+    tp_ws.append(["Student Name", "Domain", "Topic", "Correct", "Total", "Score %"])
+    _style_header(tp_ws, 4)
+    class_topics: dict[tuple, list] = {}
+    for i, student in enumerate(students):
+        name = student["base"][0]
+        agg = topic_rows_by_student[i]
+        if not agg:
+            tp_ws.append([name, "(no answers recorded)"])
+            _link(tp_ws.cell(topic_row[i], 1), STUDENTS_SHEET, student_row[i])
+            continue
+        for offset, ((domain, topic), (correct, total, _)) in enumerate(agg.items()):
+            r = topic_row[i] + offset
+            pct = correct / total if total else None
+            tp_ws.append([name, domain or None, topic or None, correct, total, pct])
+            _link(tp_ws.cell(r, 1), STUDENTS_SHEET, student_row[i])
+            tp_ws.cell(r, 6).number_format = "0.0%"
+            if pct is not None:
+                tp_ws.cell(r, 6).fill = _GOOD_FILL if pct >= 0.5 else _BAD_FILL
+            bucket = class_topics.setdefault((domain, topic), [0, 0, set()])
+            bucket[0] += correct
+            bucket[1] += total
+            bucket[2].add(i)
+    tp_ws.freeze_panes = "B5"
+    if next_topic > 5:
+        tp_ws.auto_filter.ref = f"A4:F{next_topic - 1}"
+    _widths(tp_ws, {"A": 24, "B": 20, "C": 34})
+
+    # ── Daily Learning (pivot: student × day, active minutes) ──
+    if dl_ws:
+        _back_link(dl_ws, "Daily Learning — active minutes on dil.iqbalai per day")
+        parsed = [_parse_daily_detail(s["base"][19]) for s in students]
+        days = sorted({d for p in parsed for d, _, _ in p})
+        dl_ws.append([])
+        dl_ws.append(["Student Name", "Days Learned", "Total Active Minutes"] + days)
+        _style_header(dl_ws, 4)
+        for i, student in enumerate(students):
+            by_day = {d: (m, note) for d, m, note in parsed[i]}
+            r = daily_row[i]
+            dl_ws.append([student["base"][0], student["base"][17], student["base"][16]]
+                         + [by_day.get(d, (None, ""))[0] for d in days])
+            _link(dl_ws.cell(r, 1), STUDENTS_SHEET, student_row[i])
+            for col, day in enumerate(days, start=4):
+                minutes, note = by_day.get(day, (None, ""))
+                cell = dl_ws.cell(r, col)
+                if minutes:
+                    cell.fill = _GOOD_FILL
+                if note:
+                    cell.comment = Comment(note, "IqbalAI")
+        dl_ws.freeze_panes = "D5"
+        _widths(dl_ws, {"A": 24, "B": 12, "C": 14})
+        for col in range(4, 4 + len(days)):
+            dl_ws.column_dimensions[get_column_letter(col)].width = 11
+
+    # ── Summary (first tab) ──
+    scores = [s for s in (_num(st["base"][10]) for st in students) if s is not None]
+    test_names = sorted({str(st["base"][6]) for st in students if st["base"][6]})
+    schools = sorted({str(st["base"][2]) for st in students if st["base"][2]})
+    summary["A1"] = "Student Performance Report"
+    summary["A1"].font = Font(bold=True, size=16, color="1F3864")
+    test_day = file_data.get("test_date")
+    info = [
+        ("Group", file_data.get("group")),
+        ("Test Type", file_data.get("test_type")),
+        ("Test Date", test_day.isoformat() if hasattr(test_day, "isoformat") else test_day),
+        ("Test Name", ", ".join(test_names) or None),
+        ("Schools", ", ".join(schools) or None),
+        ("Students", len(students)),
+        ("Average Score", sum(scores) / len(scores) if scores else None),
+        ("Students ≥ 50%", sum(1 for s in scores if s >= 0.5)),
+        ("Students < 50%", sum(1 for s in scores if s < 0.5)),
+    ]
+    for offset, (label, value) in enumerate(info, start=3):
+        summary.cell(offset, 1, label).font = Font(bold=True)
+        summary.cell(offset, 2, value)
+    summary.cell(9, 2).number_format = "0.0%"
+
+    row = 14
+    summary.cell(row, 1, "Sheets in this workbook").font = _TITLE_FONT
+    sheet_index = [
+        (STUDENTS_SHEET, "One row per student: score, time, learning usage"),
+        (ANSWERS_SHEET, "Every question each student answered (green = correct)"),
+        (TOPICS_SHEET, "Score per student per topic"),
+    ]
+    if dl_ws:
+        sheet_index.append((DAILY_SHEET, "Active minutes per student per day"))
+    sheet_index.append((raw_title, "Raw data in one sheet. Upload this file to Analytics as it is; do not edit this sheet."))
+    for offset, (name, desc) in enumerate(sheet_index, start=row + 1):
+        _link(summary.cell(offset, 1), name, 1, name)
+        summary.cell(offset, 2, desc)
+
+    row = row + len(sheet_index) + 3
+    summary.cell(row, 1, "Topic performance (all students)").font = _TITLE_FONT
+    header_row = row + 1
+    for col, label in enumerate(["Domain", "Topic", "Students", "Correct", "Total", "Score %"], start=1):
+        summary.cell(header_row, col, label)
+    _style_header(summary, header_row)
+    for offset, ((domain, topic), (correct, total, who)) in enumerate(
+        sorted(class_topics.items(), key=lambda kv: (kv[1][0] / kv[1][1]) if kv[1][1] else 0), start=header_row + 1
+    ):
+        pct = correct / total if total else None
+        for col, value in enumerate([domain or None, topic or None, len(who), correct, total, pct], start=1):
+            summary.cell(offset, col, value)
+        summary.cell(offset, 6).number_format = "0.0%"
+        if pct is not None:
+            summary.cell(offset, 6).fill = _GOOD_FILL if pct >= 0.5 else _BAD_FILL
+    _widths(summary, {"A": 30, "B": 40, "C": 10, "D": 10, "E": 10, "F": 10})
+
+    for sheet in (summary, st_ws, an_ws, tp_ws) + ((dl_ws,) if dl_ws else ()):
+        for sheet_row in sheet.iter_rows():
+            for cell in sheet_row:
+                if isinstance(cell.value, str):
+                    cell.data_type = "s"  # neutralize formula injection in user text
+
+    # Tab order: readable sheets first, raw Analytics sheet last; open on Summary.
+    raw = workbook[raw_title]
+    order = [summary, st_ws, an_ws, tp_ws] + ([dl_ws] if dl_ws else []) + [raw]
+    workbook._sheets = order
+    workbook.active = 0
+    raw.sheet_properties.tabColor = "A6A6A6"
+    summary.sheet_properties.tabColor = "1F3864"
+
+
 def _sheet_title(file_data) -> str:
     name = str(file_data.get("sheet_name") or "Quiz").strip() or "Quiz"
     return name[:31]
@@ -1113,6 +1414,9 @@ def workbook_for_file(file_data) -> io.BytesIO:
         ws.cell(row_number, 6).number_format = "yyyy-mm-dd"  # Test Date
         ws.cell(row_number, 11).number_format = "0.00%"  # Percentage
     _safe_text_cells(ws)
+    _style_header(ws, 1)
+    ws.freeze_panes = "B2"
+    _add_readable_sheets(workbook, ws.title, rows, file_data)
     output = io.BytesIO()
     workbook.save(output)
     output.seek(0)

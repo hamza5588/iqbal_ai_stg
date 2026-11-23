@@ -353,9 +353,12 @@ function wideQuiz(sn,aoa){const lab=v=>norm(String(v??''));const blank=v=>v===nu
 // a sheet that has a Domain | Topic table somewhere (e.g. the Guide) → domain-topic list
 function topicListRows(aoa){const i=aoa.findIndex(r=>r&&norm(String(r[0]??''))==='domain'&&norm(String(r[1]??''))==='topic');if(i<0)return null;return aoa.slice(i+1).filter(r=>r&&r[0]&&r[1]).map(r=>({Domain:String(r[0]).trim(),Topic:String(r[1]).trim()}))}
 async function readWB(file){let wb;if(file.name.toLowerCase().endsWith('.csv')){wb=XLSX.read(await file.text(),{type:'string'})}else wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
- return wb.SheetNames.flatMap(sn=>{const ws=wb.Sheets[sn];const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});const w=wideQuiz(sn,aoa);if(w)return w;const lq=longQuiz(sn,XLSX.utils.sheet_to_json(ws,{defval:null,raw:true}));if(lq)return lq;const first=(aoa[0]||[]).map(c=>norm(String(c??'')));
-  if(!first.includes('student name')&&!first.includes('name')&&!first.includes('domain')){const tt=topicListRows(aoa);if(tt)return [[sn,tt]]}
-  return [[sn,XLSX.utils.sheet_to_json(ws,{defval:null,raw:true})]]})}
+ // Exported report workbooks also carry readable copies (Summary, Students, Answers, …) of the
+ // quiz sheet; when a quiz sheet is present, only it is read so nothing is counted twice.
+ const parts=wb.SheetNames.map(sn=>{const ws=wb.Sheets[sn];const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});const w=wideQuiz(sn,aoa);if(w)return {quiz:1,v:w};const lq=longQuiz(sn,XLSX.utils.sheet_to_json(ws,{defval:null,raw:true}));if(lq)return {quiz:1,v:lq};const first=(aoa[0]||[]).map(c=>norm(String(c??'')));
+  if(!first.includes('student name')&&!first.includes('name')&&!first.includes('domain')){const tt=topicListRows(aoa);if(tt)return {v:[[sn,tt]]}}
+  return {v:[[sn,XLSX.utils.sheet_to_json(ws,{defval:null,raw:true})]]}});
+ return (parts.some(p=>p.quiz)?parts.filter(p=>p.quiz):parts).flatMap(p=>p.v)}
 function isTopicListOnly(all){return all.length&&all.every(([,rows])=>!rows.length||(Object.keys(rows[0]).map(norm).join('|')==='domain|topic'))}
 function fileDefaultDate(all){const cnt={};all.filter(([,rows])=>!(rows.length&&isUsageSheet(Object.keys(rows[0]).map(norm)))).forEach(([,rows])=>rows.forEach(r=>{const d=dateVal(get(r,DATE_COLS));if(d)cnt[d]=(cnt[d]||0)+1}));return Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||null}
 function parseLoaded(all,meta){

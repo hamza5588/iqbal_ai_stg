@@ -332,7 +332,20 @@ def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
     }
     stream = workbook_for_file(file_data)
     workbook = load_workbook(stream, data_only=False)
-    assert workbook.sheetnames == ["Diagnostic 29-Oct"]
+    # Readable linked tabs first, raw Analytics sheet (unchanged long format) last.
+    assert workbook.sheetnames == ["Summary", "Students", "Answers", "Topic Scores", "Diagnostic 29-Oct"]
+    assert workbook.active.title == "Summary"
+    students = workbook["Students"]
+    assert students["A4"].value == "Student Name" and students["E5"].value == 1
+    assert students["A5"].data_type == "s"  # formula injection is neutralized here too
+    assert students["A5"].hyperlink.location == "'Answers'!A5"
+    answers = workbook["Answers"]
+    assert answers["B5"].value == "Q1" and answers["H5"].value == "Yes"
+    assert answers["A5"].hyperlink.location == "'Students'!A5"
+    topics = workbook["Topic Scores"]
+    assert topics["C5"].value == "Algebraic Formulas/Identities" and topics["F5"].value == 1.0
+    summary = workbook["Summary"]
+    assert any(c.hyperlink and c.hyperlink.location == "'Diagnostic 29-Oct'!A1" for row in summary.iter_rows() for c in row)
     sheet = workbook["Diagnostic 29-Oct"]
     assert [cell.value for cell in sheet[1][: len(QUIZ_HEADERS)]] == list(QUIZ_HEADERS)
     assert sheet["K2"].number_format == "0.00%"
@@ -370,8 +383,13 @@ def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
             "Uncontrolled_Baseline_2026-10-29.xlsx",
         ]
         controlled = load_workbook(io.BytesIO(archive.read("Controlled_Baseline_2026-10-29.xlsx")))
-        assert [cell.value for cell in controlled.active[1][: len(QUIZ_HEADERS)]] == list(QUIZ_HEADERS)
-        assert controlled.active["B2"].value == "student@example.com"
+        raw = controlled["Diagnostic 29-Oct"]
+        assert [cell.value for cell in raw[1][: len(QUIZ_HEADERS)]] == list(QUIZ_HEADERS)
+        assert raw["B2"].value == "student@example.com"
+        uncontrolled = load_workbook(io.BytesIO(archive.read("Uncontrolled_Baseline_2026-10-29.xlsx")))
+        daily = uncontrolled["Daily Learning"]
+        assert daily["D4"].value == "2026-10-29"
+        assert "quiz day" in daily["D5"].comment.text
 
 
 def test_report_api_requires_login(monkeypatch):
