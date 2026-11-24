@@ -141,19 +141,23 @@
         '<div class="td-sec-icon"><i class="fas fa-lock"></i></div>' +
         '<div class="td-sec-intro">' +
           '<h4 class="td-exam-security-title">Exam security</h4>' +
-          '<p>The quiz locks if a student opens another tab or closes the browser. You unlock them below and they continue from the same question.</p>' +
+          '<p>When Strict mode is ON, the quiz locks if a student opens another tab or closes the browser. You unlock them below and they continue from the same question.</p>' +
         '</div>' +
-        (isStrict
-          ? '<span class="td-sec-status on"><i class="fas fa-check-circle"></i> Strict mode is ON</span>'
-          : '<span class="td-sec-status off"><i class="fas fa-exclamation-circle"></i> Not on yet — press Save</span>') +
       '</div>' +
-      '<div class="td-sec-mode">' +
-        '<label for="tdSecMode-' + z.id + '">Security mode</label>' +
-        '<select id="tdSecMode-' + z.id + '">' +
-          '<option value="strict" selected>Strict — lock on leave (Chromebook labs)</option>' +
-        '</select>' +
-        '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.saveSecurity(' + z.id + ')"><i class="fas fa-save"></i> Save</button>' +
-      '</div>' +
+      '<label class="td-sec-switch-row' + (isStrict ? ' on' : '') + '" for="tdSecToggle-' + z.id + '">' +
+        '<span class="td-sec-switch-text">' +
+          '<b>Strict exam mode</b>' +
+          '<span>' + (isStrict
+            ? 'ON — students are locked if they leave the quiz.'
+            : 'OFF — students can leave the quiz without being locked.') + '</span>' +
+        '</span>' +
+        '<span class="td-switch">' +
+          '<input type="checkbox" id="tdSecToggle-' + z.id + '"' + (isStrict ? ' checked' : '') +
+            ' onchange="tdQuizzes.toggleStrict(' + z.id + ', this)" aria-label="Strict exam mode">' +
+          '<span class="td-switch-track"><span class="td-switch-thumb"></span></span>' +
+          '<span class="td-switch-state">' + (isStrict ? 'ON' : 'OFF') + '</span>' +
+        '</span>' +
+      '</label>' +
       '<div class="td-sec-live-bar">' +
         '<div><b><i class="fas fa-users"></i> Students in this quiz</b><span class="td-sec-live-hint">Updates every few seconds</span></div>' +
         '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.toggleLiveSecurity(' + z.id + ')">' +
@@ -241,8 +245,8 @@
     return String(v).length === 16 ? String(v) + ':00' : String(v);
   }
 
-  async function saveSecurity(id) {
-    var mode = 'strict';
+  async function saveSecurity(id, mode) {
+    mode = mode === 'standard' ? 'standard' : 'strict';
     var payload = { security_mode: mode, require_seb: false };
     try {
       var updated = await lmsApi('/api/lms/quizzes/' + id, {
@@ -257,11 +261,20 @@
         row.require_seb = false;
       }
       if (state.previews[id] && updated.security) state.previews[id].security = updated.security;
-      U.toast('Exam security saved (Strict)');
+      U.toast(mode === 'strict' ? 'Strict exam mode is ON' : 'Strict exam mode is OFF');
       render();
+      return true;
     } catch (err) {
       U.toast(err.message || 'Could not save security settings', 'error');
+      return false;
     }
+  }
+
+  async function toggleStrict(id, input) {
+    var wantOn = !!(input && input.checked);
+    if (input) input.disabled = true;
+    var ok = await saveSecurity(id, wantOn ? 'strict' : 'standard');
+    if (!ok && input) { input.checked = !wantOn; input.disabled = false; }
   }
 
   function _teacherBeep() {
@@ -577,7 +590,7 @@
 
   window.tdQuizzes = {
     load: load, render: render, setTab: setTab, toggle: toggle, publish: publish, remove: remove,
-    saveDuration: saveDuration, saveSecurity: saveSecurity,
+    saveDuration: saveDuration, saveSecurity: saveSecurity, toggleStrict: toggleStrict,
     toggleLiveSecurity: toggleLiveSecurity, unlockAttempt: unlockAttempt,
     extendAttempt: extendAttempt, viewViolations: viewViolations,
     onSecurityModeChange: onSecurityModeChange, syncImportAll: syncImportAll,
