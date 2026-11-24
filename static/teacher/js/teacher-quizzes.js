@@ -321,7 +321,7 @@
           var qn = a.current_question_index != null ? ('Q' + (a.current_question_index + 1)) : '—';
           return '<div class="td-live-sec-row' + (a.is_locked ? ' locked' : '') + '">' +
             '<div><b>' + U.esc(a.student_name || ('#' + a.student_id)) + '</b> · ' +
-            (a.is_locked ? 'Locked — closed the browser' : 'Taking the quiz') +
+            (a.is_locked ? 'Locked — left the quiz' : 'Taking the quiz') +
             ' · ' + qn + '</div>' +
             '<div class="td-live-sec-actions">' +
             (a.is_locked

@@ -44,7 +44,8 @@ _LEGACY_SEB_MODES = frozenset({"seb"})
 ACTIVE_ATTEMPT_STATUSES = frozenset({"in_progress", "locked"})
 # DIL feedback 24-11-2026: side clicks / focus loss locked students out. Only a real
 # browser close (detected client-side on re-open) locks a strict exam now.
-STRICT_LOCK_EVENTS = frozenset({"browser_closed"})
+# 25-11-2026: leaving the quiz tab (new tab / other window hides the page) also locks.
+STRICT_LOCK_EVENTS = frozenset({"browser_closed", "left_quiz_tab"})
 EVENT_TYPES = frozenset(
     {
         "fullscreen_exit",
@@ -52,6 +53,7 @@ EVENT_TYPES = frozenset(
         "window_blur",
         "reload",
         "browser_closed",
+        "left_quiz_tab",
         "session_conflict",
         "seb_verify_failed",
         "seb_verify_ok",

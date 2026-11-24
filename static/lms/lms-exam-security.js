@@ -84,7 +84,7 @@
       box.innerHTML =
         '<div class="lms-exam-locked-card">' +
           '<h2>EXAM LOCKED</h2>' +
-          '<p>You closed the browser during the exam. Your teacher has been notified.</p>' +
+          '<p>You left the quiz (closed the browser or opened another tab). Your teacher has been notified.</p>' +
           '<p>Please wait for your teacher to unlock your exam.</p>' +
           '<p class="lms-exam-locked-reason"></p>' +
         '</div>';
@@ -142,7 +142,7 @@
     var now = Date.now();
     // Only a real browser/tab close (detected on re-open) locks a strict exam.
     // Clicking outside / switching focus is logged but never locks (DIL feedback 24-11-2026).
-    if (isStrict() && eventType === 'browser_closed') {
+    if (isStrict() && (eventType === 'browser_closed' || eventType === 'left_quiz_tab')) {
       if (now - state.lastLockPostAt < 800) return Promise.resolve(null);
       state.lastLockPostAt = now;
       // Fail closed locally while waiting for server
@@ -160,7 +160,7 @@
       handleServerLock(d);
       return d;
     }).catch(function () {
-      if (isStrict() && eventType === 'browser_closed') {
+      if (isStrict() && (eventType === 'browser_closed' || eventType === 'left_quiz_tab')) {
         state.eventQueue.push({ eventType: eventType, severity: severity, message: message, context: ctx });
         showLockedOverlay(eventType);
       }
@@ -169,7 +169,7 @@
 
   function isLeaveEventType(eventType) {
     return eventType === 'tab_hidden' || eventType === 'window_blur' ||
-      eventType === 'fullscreen_exit' || eventType === 'focus_loss' || eventType === 'browser_closed';
+      eventType === 'fullscreen_exit' || eventType === 'focus_loss' || eventType === 'browser_closed' || eventType === 'left_quiz_tab';
   }
 
   function flushQueue() {
@@ -249,6 +249,17 @@
   }
 
   function onVisibility() {
+    if (document.hidden && isStrict() && !state.locked) {
+      // Student switched to another tab / window -> lock (DIL 25-11-2026). Wait briefly:
+      // a reload/close also hides the page, but then this timer never runs, so a refresh
+      // does not lock (a real browser close is caught on re-open as browser_closed).
+      setTimeout(function () {
+        if (document.hidden && state.attemptId && !state.locked) {
+          postEvent('left_quiz_tab', 'warn', 'Left the quiz tab (new tab or other window)');
+        }
+      }, 300);
+      return;
+    }
     if (document.hidden) {
       postEvent('tab_hidden', 'warn', 'Examination tab hidden');
       if (!isStrict() && state.security && state.security.warn_on_focus_loss && typeof lmsShowToast === 'function') {

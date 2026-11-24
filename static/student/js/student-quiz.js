@@ -377,7 +377,7 @@
         (remainingSeconds != null ? '<span id="lmsQuizTimer" class="sd-timer" style="margin-left:auto;"></span>' : '') +
         '</div>' +
         '<div class="lms-exam-locked-inline"><h3>EXAM LOCKED</h3>' +
-        '<p>You closed the browser during the exam. Your teacher has been notified.</p>' +
+        '<p>You left the quiz (closed the browser or opened another tab). Your teacher has been notified.</p>' +
         '<p>Please wait for your teacher to unlock your exam.</p></div>';
       return;
     }

@@ -488,3 +488,13 @@ def test_side_click_and_tab_switch_never_lock_strict(db, monkeypatch):
     ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked" and attempt.lock_reason == "browser_closed"
+
+
+def test_leaving_quiz_tab_locks_strict(db, monkeypatch):
+    """DIL 25-11-2026: going to another tab while the quiz is open locks it."""
+    a, _, student, _, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    row = ess.record_event(attempt, "left_quiz_tab", severity="warn")
+    db.refresh(attempt)
+    assert attempt.status == "locked" and attempt.lock_reason == "left_quiz_tab"
+    assert getattr(row, "_strict_locked", False) is True
