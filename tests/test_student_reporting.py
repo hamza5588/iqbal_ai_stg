@@ -313,7 +313,7 @@ def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
     assert "student-reporting.js') }}?v=20261120mergequiz1" in dashboard
 
 
-def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
+def test_workbook_matches_packaged_template_and_export_zips_per_quiz(db):
     file_data = {
         "group": "Controlled",
         "test_type": "Baseline",
@@ -332,27 +332,23 @@ def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
     }
     stream = workbook_for_file(file_data)
     workbook = load_workbook(stream, data_only=False)
-    # Readable linked tabs first, raw Analytics sheet (unchanged long format) last.
-    assert workbook.sheetnames == ["Summary", "Students", "Answers", "Topic Scores", "Diagnostic 29-Oct"]
-    assert workbook.active.title == "Summary"
-    students = workbook["Students"]
-    assert students["A4"].value == "Student Name" and students["E5"].value == 1
-    assert students["A5"].data_type == "s"  # formula injection is neutralized here too
-    assert students["A5"].hyperlink.location == "'Answers'!A5"
+    # Exactly the packaged admin template: same sheets, columns and header colours.
+    template = load_workbook(Path("app/report_templates/controlled.xlsx"))
+    assert workbook.sheetnames == template.sheetnames
+    for name in ("Results", "Learning Usage", "Topic Scores", "Answers"):
+        got, ref = workbook[name][1], template[name][1]
+        assert [c.value for c in got] == [c.value for c in ref]
+        assert [c.fill.fgColor.rgb for c in got] == [c.fill.fgColor.rgb for c in ref]
+        assert [c.font.color.rgb for c in got] == [c.font.color.rgb for c in ref]
+    results = workbook["Results"]
+    assert results.max_row == 2 and results["B2"].value == "student@example.com"
+    assert results["A2"].data_type == "s"  # formula injection is neutralized
+    assert results["K2"].number_format == "0.00%"
     answers = workbook["Answers"]
-    assert answers["B5"].value == "Q1" and answers["H5"].value == "Yes"
-    assert answers["A5"].hyperlink.location == "'Students'!A5"
+    assert answers.max_row == 2 and answers["C2"].value == "Q1" and answers["I2"].value == "Yes"
+    assert answers.max_column == 9
     topics = workbook["Topic Scores"]
-    assert topics["C5"].value == "Algebraic Formulas/Identities" and topics["F5"].value == 1.0
-    summary = workbook["Summary"]
-    assert any(c.hyperlink and c.hyperlink.location == "'Diagnostic 29-Oct'!A1" for row in summary.iter_rows() for c in row)
-    sheet = workbook["Diagnostic 29-Oct"]
-    assert [cell.value for cell in sheet[1][: len(QUIZ_HEADERS)]] == list(QUIZ_HEADERS)
-    assert sheet["K2"].number_format == "0.00%"
-    assert sheet["A2"].data_type == "s"  # formula injection is neutralized
-    assert sheet["U2"].value == "Q1"
-    assert sheet["Y2"].value == "B"
-    assert sheet["AB2"].value == 12
+    assert topics["D2"].value == "Algebraic Formulas/Identities" and topics["G2"].value == 1.0
     second = {
         **file_data,
         "group": "Uncontrolled",
@@ -383,13 +379,10 @@ def test_workbook_matches_analytics_long_format_and_export_zips_per_quiz(db):
             "Uncontrolled_Baseline_2026-10-29.xlsx",
         ]
         controlled = load_workbook(io.BytesIO(archive.read("Controlled_Baseline_2026-10-29.xlsx")))
-        raw = controlled["Diagnostic 29-Oct"]
-        assert [cell.value for cell in raw[1][: len(QUIZ_HEADERS)]] == list(QUIZ_HEADERS)
-        assert raw["B2"].value == "student@example.com"
+        assert controlled["Results"]["B2"].value == "student@example.com"
         uncontrolled = load_workbook(io.BytesIO(archive.read("Uncontrolled_Baseline_2026-10-29.xlsx")))
-        daily = uncontrolled["Daily Learning"]
-        assert daily["D4"].value == "2026-10-29"
-        assert "quiz day" in daily["D5"].comment.text
+        assert uncontrolled["Results"]["B2"].value == "second@example.com"
+        assert uncontrolled["Answers"]["G2"].value == "A"
 
 
 def test_report_api_requires_login(monkeypatch):

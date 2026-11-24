@@ -1380,8 +1380,76 @@ def _sheet_title(file_data) -> str:
     return name[:31]
 
 
-def workbook_for_file(file_data) -> io.BytesIO:
-    """Build one Analytics-compatible quiz workbook (single sheet, long rows)."""
+TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "report_templates"
+TEMPLATE_HEADERS = {
+    "Results": [
+        "Student Name", "Email", "School", "Group", "Test Type", "Test Date", "Test Name",
+        "Total Questions", "Correct Answers", "Incorrect", "Percentage", "Quiz Minutes",
+    ],
+    "Learning Usage": LEARNING_USAGE_HEADERS,
+    "Topic Scores": TOPIC_HEADERS,
+    "Answers": ANSWER_HEADERS[:9],
+}
+
+
+def _file_student_ids(file_data) -> set:
+    ids = set()
+    for row in file_data.get("rows") or []:
+        if len(row) > 18 and row[18] is not None:
+            ids.add(row[18])
+    return ids
+
+
+def workbook_for_file(file_data, learning_usage=None) -> io.BytesIO:
+    """Fill the packaged admin template (exact sheets, columns, header colours)."""
+    template_name = "controlled.xlsx" if file_data.get("group") == "Controlled" else "uncontrolled.xlsx"
+    template_path = TEMPLATE_DIR / template_name
+    if not template_path.exists():
+        raise RuntimeError(f"Report template is missing: {template_name}")
+    workbook = load_workbook(template_path)
+    for sheet_name, headers in TEMPLATE_HEADERS.items():
+        if sheet_name not in workbook.sheetnames:
+            raise RuntimeError(f"Packaged template is missing sheet: {sheet_name}")
+        ws = workbook[sheet_name]
+        if [cell.value for cell in ws[1][: len(headers)]] != list(headers):
+            raise RuntimeError(f"Packaged template has incompatible {sheet_name} columns.")
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row - 1)
+
+    for row in file_data.get("results") or []:
+        values = list(row)[:12]
+        workbook["Results"].append(values + [None] * (12 - len(values)))
+    student_ids = _file_student_ids(file_data)
+    for row in learning_usage or []:
+        if not student_ids or row[1] in student_ids:
+            workbook["Learning Usage"].append(list(row)[:7])
+    for row in file_data.get("topics") or []:
+        workbook["Topic Scores"].append(list(row)[:7])
+    for row in file_data.get("answers") or []:
+        workbook["Answers"].append(list(row)[:9])
+
+    results = workbook["Results"]
+    for r in range(2, results.max_row + 1):
+        results.cell(r, 6).number_format = "yyyy-mm-dd"
+        results.cell(r, 11).number_format = "0.00%"
+    topics = workbook["Topic Scores"]
+    for r in range(2, topics.max_row + 1):
+        topics.cell(r, 7).number_format = "0.00%"
+    usage = workbook["Learning Usage"]
+    for r in range(2, usage.max_row + 1):
+        usage.cell(r, 1).number_format = "yyyy-mm-dd"
+        usage.cell(r, 5).number_format = "[h]:mm:ss"
+    for sheet_name in TEMPLATE_HEADERS:
+        _safe_text_cells(workbook[sheet_name])
+    workbook.active = workbook.sheetnames.index("Results")
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output
+
+
+def analytics_workbook_for_file(file_data) -> io.BytesIO:
+    """Previous Analytics long-format workbook (kept for reference / scripts)."""
     workbook = Workbook()
     ws = workbook.active
     ws.title = _sheet_title(file_data)
@@ -1430,7 +1498,7 @@ def export_report(report) -> tuple[io.BytesIO, str, str]:
     if len(files) == 1:
         item = files[0]
         return (
-            workbook_for_file(item),
+            workbook_for_file(item, report.get("learning_usage")),
             item["filename"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
@@ -1445,7 +1513,7 @@ def export_report(report) -> tuple[io.BytesIO, str, str]:
                 stem = Path(name).stem
                 name = f"{stem}_{len(used_names) + 1}.xlsx"
             used_names.add(name)
-            archive.writestr(name, workbook_for_file(item).getvalue())
+            archive.writestr(name, workbook_for_file(item, report.get("learning_usage")).getvalue())
     buffer.seek(0)
     start = report["filters"]["start"]
     end = report["filters"]["end"]
