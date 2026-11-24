@@ -382,32 +382,50 @@
       return;
     }
     var idx = currentQ, total = questions.length, q = questions[idx], savedIdx = savedAnswers[idx];
-    var pct = Math.round(100 * (idx + 1) / total);
     var answered = Object.keys(savedAnswers).length;
+    var answeredPct = Math.round(100 * answered / total);
     var opts = (q.options || []).map(function (o, oi) {
       return '<button type="button" class="sd-q-option lms-quiz-option' + (savedIdx === oi ? ' selected' : '') + '" onclick="selectLmsQuizOption(' + oi + ')">' +
-        '<span class="sd-radio"></span><span class="sd-opt-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '.</span>' +
+        '<span class="sd-radio"></span><span class="sd-opt-label">' + escapeHtml(o.label || String.fromCharCode(65 + oi)) + '</span>' +
         '<span class="sd-opt-body">' + fmtOption(o) + '</span></button>';
     }).join('');
     var nextBtn = idx < total - 1
       ? '<button type="button" class="sd-btn sd-btn-primary" onclick="nextLmsQuizQuestion()">' + (savedIdx === undefined ? 'Skip' : 'Next') + ' <i class="fas fa-chevron-right"></i></button>' : '';
     // Submit only goes through once every question is answered; until then the button says how many are left.
     var left = total - answered;
-    var submitBtn = '<button type="button" data-quiz-submit class="sd-btn ' + (left === 0 ? 'sd-btn-primary' : 'sd-btn-outline blue') + '"' +
-      (left ? ' title="Answer all questions to submit" style="opacity:.6;"' : '') +
-      ' onclick="submitLmsQuiz()">Submit Quiz' + (left ? ' (' + left + ' left)' : '') + '</button>';
-    var timerHtml = remainingSeconds != null
-      ? '<span id="lmsQuizTimer" class="sd-timer" style="margin-left:auto;"></span>' : '';
+    var submitBtn = '<button type="button" data-quiz-submit class="sd-btn lms-qz-submit ' + (left === 0 ? 'sd-btn-primary ready' : 'sd-btn-outline blue') + '"' +
+      (left ? ' title="Answer all questions to submit"' : '') +
+      ' onclick="submitLmsQuiz()"><i class="fas fa-paper-plane"></i> Submit Quiz' + (left ? ' (' + left + ' left)' : '') + '</button>';
+    var timerCard = remainingSeconds != null
+      ? '<div class="lms-qz-side-card lms-qz-timer-card"><div class="lms-qz-side-label">Time left</div>' +
+        '<span id="lmsQuizTimer" class="sd-timer"></span></div>' : '';
     el.innerHTML =
-      '<div class="lms-quiz-taking-head"><span class="lms-quiz-taking-title">' + escapeHtml(quizTitle) + '</span>' + timerHtml + '</div>' +
-      '<div class="sd-qprogress" style="width:100%;margin-bottom:16px;"><div class="sd-qp-top"><span>Question ' + (idx + 1) + ' of ' + total +
-      (answered ? ' · ' + answered + ' answered' : '') + '</span><b>' + pct + '%</b></div>' +
-      '<div class="sd-track"><div class="sd-fill" style="width:' + pct + '%;"></div></div></div>' +
-      '<div class="sd-q-label">Question ' + (idx + 1) + '</div>' +
-      '<div class="sd-q-text lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
-      opts + mapHtml() +
-      '<div class="sd-q-nav"><button type="button" class="sd-btn sd-btn-outline" onclick="prevLmsQuizQuestion()"' + (idx > 0 ? '' : ' disabled') + '>Previous</button>' +
-      '<div class="sd-q-nav-end">' + submitBtn + nextBtn + '</div></div>';
+      '<div class="lms-qz">' +
+        '<div class="lms-qz-main">' +
+          '<div class="lms-quiz-taking-head lms-qz-head">' +
+            '<span class="lms-qz-chip">Question ' + (idx + 1) + ' of ' + total + '</span>' +
+            (savedIdx !== undefined ? '<span class="lms-qz-chip done"><i class="fas fa-check"></i> Answered</span>' : '') +
+          '</div>' +
+          '<div class="lms-qz-card">' +
+            '<div class="sd-q-label">Question ' + (idx + 1) + '</div>' +
+            '<div class="sd-q-text lms-quiz-stem">' + fmtQuestion(q) + '</div>' +
+            '<div class="lms-qz-options">' + opts + '</div>' +
+          '</div>' +
+          '<div class="sd-q-nav"><button type="button" class="sd-btn sd-btn-outline" onclick="prevLmsQuizQuestion()"' + (idx > 0 ? '' : ' disabled') + '><i class="fas fa-chevron-left"></i> Previous</button>' +
+          '<div class="sd-q-nav-end">' + submitBtn + nextBtn + '</div></div>' +
+        '</div>' +
+        '<aside class="lms-qz-side">' +
+          timerCard +
+          '<div class="lms-qz-side-card">' +
+            '<div class="lms-qz-side-label">Progress</div>' +
+            '<div class="lms-qz-progress-num"><b>' + answered + '</b> / ' + total + ' answered</div>' +
+            '<div class="sd-qprogress"><div class="sd-track"><div class="sd-fill" style="width:' + answeredPct + '%;"></div></div></div>' +
+          '</div>' +
+          (total > 1 ? '<div class="lms-qz-side-card">' + mapHtml() +
+            '<div class="lms-qz-legend"><span><i class="cur"></i>Current</span><span><i class="ans"></i>Answered</span><span><i class="una"></i>Not answered</span></div>' +
+          '</div>' : '') +
+        '</aside>' +
+      '</div>';
     updateQuizTimerDisplay();
     typeset(el);
   }

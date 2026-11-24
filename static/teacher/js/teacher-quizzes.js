@@ -6,7 +6,7 @@
   var U = window.tdUtil;
   var state = {
     quizzes: [], tab: 'all', expandedId: null, previews: {}, loaded: false,
-    livePoll: {}, knownLocked: {}, audioUnlocked: false
+    livePoll: {}, knownLocked: {}, audioUnlocked: false, liveOpen: {}
   };
 
   function $(id) { return document.getElementById(id); }
@@ -92,6 +92,8 @@
       var body = $('tdQuizBody-' + state.expandedId);
       if (body && typeof window._lmsTypeset === 'function') window._lmsTypeset(body);
       mountDraftEditor(state.expandedId);
+      // The list is rebuilt on every render: keep an open students panel open and filled.
+      if (state.liveOpen[state.expandedId]) refreshLiveSecurity(state.expandedId);
     }
   }
 
@@ -122,29 +124,43 @@
       return '<span class="td-pill" title="Strict: lock on tab leave, teacher unlock"><i class="fas fa-lock"></i> Strict</span>';
     }
     if (mode === 'supervised') {
-      return '<span class="td-pill" title="In-app supervised soft lock"><i class="fas fa-shield-halved"></i> Supervised</span>';
+      return '<span class="td-pill" title="In-app supervised soft lock"><i class="fas fa-shield"></i> Supervised</span>';
     }
     return '<span class="td-pill" title="In-app soft lockdown (normal browser)"><i class="fas fa-lock"></i> Soft lock</span>';
   }
 
   function securityPanelHtml(z) {
-    // DIL feedback 24-11-2026: one simple control. Strict is the only mode offered;
-    // the exam locks only if a student closes the browser, and the teacher unlocks here.
+    // DIL feedback 24/25-11-2026: one simple control (Strict) + a live students list
+    // with a single Unlock button. Strict locks when a student leaves the quiz tab or
+    // closes the browser.
+    var sec = z.security || {};
+    var isStrict = (sec.security_mode || z.security_mode) === 'strict';
+    var open = !!state.liveOpen[z.id];
     return '<div class="td-exam-security" id="tdExamSecurity-' + z.id + '" data-quiz-id="' + z.id + '">' +
-      '<h4 class="td-exam-security-title"><i class="fas fa-shield-halved"></i> Exam security</h4>' +
-      '<div class="td-exam-security-grid">' +
-        '<div class="td-field">' +
-          '<label for="tdSecMode-' + z.id + '">Security mode</label>' +
-          '<select id="tdSecMode-' + z.id + '">' +
-            '<option value="strict" selected>Strict — lock on leave (Chromebook labs)</option>' +
-          '</select>' +
+      '<div class="td-sec-top">' +
+        '<div class="td-sec-icon"><i class="fas fa-lock"></i></div>' +
+        '<div class="td-sec-intro">' +
+          '<h4 class="td-exam-security-title">Exam security</h4>' +
+          '<p>The quiz locks if a student opens another tab or closes the browser. You unlock them below and they continue from the same question.</p>' +
         '</div>' +
+        (isStrict
+          ? '<span class="td-sec-status on"><i class="fas fa-check-circle"></i> Strict mode is ON</span>'
+          : '<span class="td-sec-status off"><i class="fas fa-exclamation-circle"></i> Not on yet — press Save</span>') +
       '</div>' +
-      '<div class="td-exam-security-actions">' +
+      '<div class="td-sec-mode">' +
+        '<label for="tdSecMode-' + z.id + '">Security mode</label>' +
+        '<select id="tdSecMode-' + z.id + '">' +
+          '<option value="strict" selected>Strict — lock on leave (Chromebook labs)</option>' +
+        '</select>' +
         '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.saveSecurity(' + z.id + ')"><i class="fas fa-save"></i> Save</button>' +
-        '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.toggleLiveSecurity(' + z.id + ')"><i class="fas fa-unlock"></i> Unlock students</button>' +
       '</div>' +
-      '<div id="tdLiveSec-' + z.id + '" class="td-live-security" hidden></div>' +
+      '<div class="td-sec-live-bar">' +
+        '<div><b><i class="fas fa-users"></i> Students in this quiz</b><span class="td-sec-live-hint">Updates every few seconds</span></div>' +
+        '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.toggleLiveSecurity(' + z.id + ')">' +
+          (open ? '<i class="fas fa-eye-slash"></i> Hide' : '<i class="fas fa-eye"></i> Show students') + '</button>' +
+      '</div>' +
+      '<div id="tdLiveSec-' + z.id + '" class="td-live-security"' + (open ? '' : ' hidden') + '>' +
+        '<p class="td-help">Loading students…</p></div>' +
     '</div>';
   }
 
@@ -271,20 +287,25 @@
     }
   }
 
-  function toggleLiveSecurity(quizId) {
+  function openLiveSecurity(quizId) {
+    state.liveOpen[quizId] = true;
     var panel = $('tdLiveSec-' + quizId);
-    if (!panel) return;
-    if (!panel.hidden) {
-      panel.hidden = true;
-      stopLiveSecurity(quizId);
-      return;
-    }
-    panel.hidden = false;
-    state.audioUnlocked = true;
-    _teacherBeep();
+    if (panel) panel.hidden = false;
     refreshLiveSecurity(quizId);
     stopLiveSecurity(quizId);
     state.livePoll[quizId] = setInterval(function () { refreshLiveSecurity(quizId); }, 4000);
+  }
+
+  function toggleLiveSecurity(quizId) {
+    if (state.liveOpen[quizId]) {
+      delete state.liveOpen[quizId];
+      stopLiveSecurity(quizId);
+    } else {
+      state.audioUnlocked = true;
+      _teacherBeep();
+      openLiveSecurity(quizId);
+    }
+    render();
   }
 
   async function refreshLiveSecurity(quizId) {
@@ -310,24 +331,34 @@
         delete state.knownLocked[quizId + ':' + a.attempt_id];
       });
       if (!attempts.length) {
-        panel.innerHTML = '<p class="td-help">No students currently in this exam.</p>';
+        panel.innerHTML = '<div class="td-sec-empty"><i class="far fa-smile"></i> No students are taking this quiz right now.</div>';
         return;
       }
+      var lockedN = data.locked_count || 0;
       panel.innerHTML =
-        '<div class="td-live-sec-head"><strong>Students in this quiz</strong> — ' +
-        (data.locked_count || 0) + ' locked / ' + (data.active_count || 0) + ' active</div>' +
+        '<div class="td-sec-counts">' +
+          '<span class="td-sec-count locked"><b>' + lockedN + '</b> locked</span>' +
+          '<span class="td-sec-count active"><b>' + Math.max(0, (data.active_count || attempts.length) - lockedN) + '</b> taking the quiz</span>' +
+        '</div>' +
         '<div class="td-live-sec-list">' +
-        attempts.map(function (a) {
-          var qn = a.current_question_index != null ? ('Q' + (a.current_question_index + 1)) : '—';
+        attempts.slice().sort(function (x, y) { return (y.is_locked ? 1 : 0) - (x.is_locked ? 1 : 0); }).map(function (a) {
+          var name = a.student_name || ('Student #' + a.student_id);
+          var qn = a.current_question_index != null ? ('Question ' + (a.current_question_index + 1)) : '';
           return '<div class="td-live-sec-row' + (a.is_locked ? ' locked' : '') + '">' +
-            '<div><b>' + U.esc(a.student_name || ('#' + a.student_id)) + '</b> · ' +
-            (a.is_locked ? 'Locked — left the quiz' : 'Taking the quiz') +
-            ' · ' + qn + '</div>' +
-            '<div class="td-live-sec-actions">' +
+            '<div class="td-sec-student">' +
+              '<span class="td-sec-avatar">' + U.esc(String(name).trim().charAt(0).toUpperCase() || '?') + '</span>' +
+              '<div><b>' + U.esc(name) + '</b>' +
+                '<div class="td-sec-sub">' +
+                  (a.is_locked
+                    ? '<span class="td-sec-tag locked"><i class="fas fa-lock"></i> Locked — left the quiz</span>'
+                    : '<span class="td-sec-tag ok"><i class="fas fa-pen"></i> Taking quiz</span>') +
+                  (qn ? '<span class="td-sec-q">' + qn + '</span>' : '') +
+                '</div></div>' +
+            '</div>' +
             (a.is_locked
-              ? '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.unlockAttempt(' + a.attempt_id + ',' + quizId + ')">Unlock &amp; Resume</button>'
+              ? '<button type="button" class="td-btn td-btn-primary td-sec-unlock" onclick="tdQuizzes.unlockAttempt(' + a.attempt_id + ',' + quizId + ')"><i class="fas fa-unlock"></i> Unlock &amp; Resume</button>'
               : '') +
-            '</div></div>';
+          '</div>';
         }).join('') +
         '</div>';
     } catch (err) {
@@ -382,7 +413,14 @@
   }
 
   async function toggle(id) {
-    if (state.expandedId === id) { state.expandedId = null; render(); return; }
+    if (state.expandedId === id) {
+      state.expandedId = null;
+      delete state.liveOpen[id];
+      stopLiveSecurity(id);
+      render();
+      return;
+    }
+    if (state.expandedId != null) { delete state.liveOpen[state.expandedId]; stopLiveSecurity(state.expandedId); }
     state.expandedId = id;
     render();
     if (!state.previews[id]) {
@@ -398,6 +436,11 @@
       } catch (err) {
         state.previews[id] = { error: err.message || 'Could not load quiz preview.' };
       }
+      render();
+    }
+    var opened = state.quizzes.find(function (z) { return z.id === id; });
+    if (state.expandedId === id && opened && opened.status === 'published' && !state.liveOpen[id]) {
+      openLiveSecurity(id);
       render();
     }
   }
