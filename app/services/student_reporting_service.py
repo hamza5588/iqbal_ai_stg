@@ -16,7 +16,7 @@ import zipfile
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.comments import Comment
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.hyperlink import Hyperlink
 from sqlalchemy import and_, func, or_
@@ -1380,83 +1380,27 @@ def _sheet_title(file_data) -> str:
     return name[:31]
 
 
-TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "report_templates"
-TEMPLATE_HEADERS = {
-    "Results": [
-        "Student Name", "Email", "School", "Group", "Test Type", "Test Date", "Test Name",
-        "Total Questions", "Correct Answers", "Incorrect", "Percentage", "Quiz Minutes",
-    ],
-    "Learning Usage": LEARNING_USAGE_HEADERS,
-    "Topic Scores": TOPIC_HEADERS,
-    "Answers": ANSWER_HEADERS[:9],
-}
-
-
-def _file_student_ids(file_data) -> set:
-    ids = set()
-    for row in file_data.get("rows") or []:
-        if len(row) > 18 and row[18] is not None:
-            ids.add(row[18])
-    return ids
+# Exact admin download format (reference: Uncontrolled_FollowUp_2026-10-26.xlsx):
+# one sheet, one row per student per question, 27 columns, navy headers with the
+# learning-usage block in teal, student-banded rows and coloured Is Correct cells.
+EXPORT_HEADERS = QUIZ_HEADERS[:27]
+_EXPORT_WIDTHS = [22, 34, 13, 13, 10, 11, 30, 9, 9, 9, 10, 11, 9, 12, 13, 13, 15, 9, 10, 60, 9, 11, 40, 70, 9, 9, 9]
+_EXPORT_NAVY = PatternFill("solid", fgColor="1F2865")
+_EXPORT_TEAL = PatternFill("solid", fgColor="0D8075")
+_EXPORT_TEAL_COLS = range(15, 21)  # O..T learning-usage columns
+_EXPORT_CENTER_COLS = set(range(8, 20)) | {21, 25, 26, 27}  # H..S, U, Y, Z, AA
+_EXPORT_BAND = PatternFill("solid", fgColor="F3F5FA")
+_EXPORT_YES = PatternFill("solid", fgColor="DCF3E6")
+_EXPORT_NO = PatternFill("solid", fgColor="FDE2E4")
+_EXPORT_BLANK = PatternFill("solid", fgColor="EEEEEE")
+_EXPORT_BORDER = Border(bottom=Side(style="thin", color="E3E6EE"))
 
 
 def workbook_for_file(file_data, learning_usage=None) -> io.BytesIO:
-    """Fill the packaged admin template (exact sheets, columns, header colours)."""
-    template_name = "controlled.xlsx" if file_data.get("group") == "Controlled" else "uncontrolled.xlsx"
-    template_path = TEMPLATE_DIR / template_name
-    if not template_path.exists():
-        raise RuntimeError(f"Report template is missing: {template_name}")
-    workbook = load_workbook(template_path)
-    for sheet_name, headers in TEMPLATE_HEADERS.items():
-        if sheet_name not in workbook.sheetnames:
-            raise RuntimeError(f"Packaged template is missing sheet: {sheet_name}")
-        ws = workbook[sheet_name]
-        if [cell.value for cell in ws[1][: len(headers)]] != list(headers):
-            raise RuntimeError(f"Packaged template has incompatible {sheet_name} columns.")
-        if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row - 1)
-
-    for row in file_data.get("results") or []:
-        values = list(row)[:12]
-        workbook["Results"].append(values + [None] * (12 - len(values)))
-    student_ids = _file_student_ids(file_data)
-    for row in learning_usage or []:
-        if not student_ids or row[1] in student_ids:
-            workbook["Learning Usage"].append(list(row)[:7])
-    for row in file_data.get("topics") or []:
-        workbook["Topic Scores"].append(list(row)[:7])
-    for row in file_data.get("answers") or []:
-        workbook["Answers"].append(list(row)[:9])
-
-    results = workbook["Results"]
-    for r in range(2, results.max_row + 1):
-        results.cell(r, 6).number_format = "yyyy-mm-dd"
-        results.cell(r, 11).number_format = "0.00%"
-    topics = workbook["Topic Scores"]
-    for r in range(2, topics.max_row + 1):
-        topics.cell(r, 7).number_format = "0.00%"
-    usage = workbook["Learning Usage"]
-    for r in range(2, usage.max_row + 1):
-        usage.cell(r, 1).number_format = "yyyy-mm-dd"
-        usage.cell(r, 5).number_format = "[h]:mm:ss"
-    for sheet_name in TEMPLATE_HEADERS:
-        _safe_text_cells(workbook[sheet_name])
-    workbook.active = workbook.sheetnames.index("Results")
-    output = io.BytesIO()
-    workbook.save(output)
-    output.seek(0)
-    return output
-
-
-def analytics_workbook_for_file(file_data) -> io.BytesIO:
-    """Previous Analytics long-format workbook (kept for reference / scripts)."""
-    workbook = Workbook()
-    ws = workbook.active
-    ws.title = _sheet_title(file_data)
-    ws.append(list(QUIZ_HEADERS))
+    """Build one quiz workbook in the exact admin download format (single sheet)."""
     rows = file_data.get("rows")
     if rows is None:
-        # Allow older callers that only supply results/answers to still export.
+        # Older callers that only supply results/answers.
         rows = []
         by_email = {row[1]: row for row in (file_data.get("results") or [])}
         for answer in file_data.get("answers") or []:
@@ -1465,26 +1409,56 @@ def analytics_workbook_for_file(file_data) -> io.BytesIO:
                 file_data.get("test_type") or "", file_data.get("test_date"),
                 "", None, None, None, None, None,
             ]
-            pad = list(base[:12]) + [None] * (20 - 12)
-            if len(pad) < 20:
-                pad.extend([None] * (20 - len(pad)))
-            answer_tail = list(answer[2:])
-            # Expect QNo..Is Correct (+ optional Question Time).
-            while len(answer_tail) < 8:
-                answer_tail.append(None)
-            rows.append(pad[:20] + answer_tail[:8])
+            head = (list(base[:12]) + [None] * 20)[:20]
+            rows.append(head + (list(answer[2:]) + [None] * 7)[:7])
+
+    workbook = Workbook()
+    ws = workbook.active
+    ws.title = _sheet_title(file_data)
+    ws.append(list(EXPORT_HEADERS))
+    header_font = Font(bold=True, color="FFFFFF")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for col, cell in enumerate(ws[1], 1):
+        cell.fill = _EXPORT_TEAL if col in _EXPORT_TEAL_COLS else _EXPORT_NAVY
+        cell.font = header_font
+        cell.alignment = header_align
+    ws.row_dimensions[1].height = 58
+
+    center = Alignment(horizontal="center")
+    band_index = -1
+    previous_student = object()
     for row in rows:
-        values = list(row)
-        if len(values) < len(QUIZ_HEADERS):
-            values.extend([None] * (len(QUIZ_HEADERS) - len(values)))
-        ws.append(values[: len(QUIZ_HEADERS)])
-    for row_number in range(2, ws.max_row + 1):
-        ws.cell(row_number, 6).number_format = "yyyy-mm-dd"  # Test Date
-        ws.cell(row_number, 11).number_format = "0.00%"  # Percentage
-    _safe_text_cells(ws)
-    _style_header(ws, 1)
+        values = (list(row) + [None] * 27)[:27]
+        if values[18] is not None:
+            values[18] = str(values[18])  # dil.iqbalai Student ID is text in the reference file
+        ws.append(values)
+        r = ws.max_row
+        student_key = values[1] or values[0]
+        if student_key != previous_student:
+            band_index += 1
+            previous_student = student_key
+        banded = band_index % 2 == 1
+        no_answers = values[20] in (None, "")  # student row without question rows → grey row
+        for col in range(1, 28):
+            cell = ws.cell(r, col)
+            cell.border = _EXPORT_BORDER
+            if col in _EXPORT_CENTER_COLS:
+                cell.alignment = center
+            if no_answers:
+                cell.fill = _EXPORT_BLANK
+            elif col == 27:
+                verdict = str(cell.value or "").strip().lower()
+                cell.fill = _EXPORT_YES if verdict == "yes" else _EXPORT_NO if verdict == "no" else _EXPORT_BLANK
+            elif banded:
+                cell.fill = _EXPORT_BAND
+        ws.cell(r, 6).number_format = "yyyy-mm-dd"
+        ws.cell(r, 11).number_format = "0%"
+
+    for col, width in enumerate(_EXPORT_WIDTHS, 1):
+        ws.column_dimensions[get_column_letter(col)].width = width
     ws.freeze_panes = "B2"
-    _add_readable_sheets(workbook, ws.title, rows, file_data)
+    ws.auto_filter.ref = f"A1:{get_column_letter(27)}{ws.max_row}"
+    _safe_text_cells(ws)
     output = io.BytesIO()
     workbook.save(output)
     output.seek(0)
@@ -1498,7 +1472,7 @@ def export_report(report) -> tuple[io.BytesIO, str, str]:
     if len(files) == 1:
         item = files[0]
         return (
-            workbook_for_file(item, report.get("learning_usage")),
+            workbook_for_file(item),
             item["filename"],
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
@@ -1513,7 +1487,7 @@ def export_report(report) -> tuple[io.BytesIO, str, str]:
                 stem = Path(name).stem
                 name = f"{stem}_{len(used_names) + 1}.xlsx"
             used_names.add(name)
-            archive.writestr(name, workbook_for_file(item, report.get("learning_usage")).getvalue())
+            archive.writestr(name, workbook_for_file(item).getvalue())
     buffer.seek(0)
     start = report["filters"]["start"]
     end = report["filters"]["end"]

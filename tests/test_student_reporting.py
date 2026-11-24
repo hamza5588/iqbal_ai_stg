@@ -313,7 +313,7 @@ def test_report_ui_uses_simple_primary_filters_and_cache_busts_loader():
     assert "student-reporting.js') }}?v=20261120mergequiz1" in dashboard
 
 
-def test_workbook_matches_packaged_template_and_export_zips_per_quiz(db):
+def test_workbook_matches_admin_download_format_and_export_zips_per_quiz(db):
     file_data = {
         "group": "Controlled",
         "test_type": "Baseline",
@@ -332,23 +332,22 @@ def test_workbook_matches_packaged_template_and_export_zips_per_quiz(db):
     }
     stream = workbook_for_file(file_data)
     workbook = load_workbook(stream, data_only=False)
-    # Exactly the packaged admin template: same sheets, columns and header colours.
-    template = load_workbook(Path("app/report_templates/controlled.xlsx"))
-    assert workbook.sheetnames == template.sheetnames
-    for name in ("Results", "Learning Usage", "Topic Scores", "Answers"):
-        got, ref = workbook[name][1], template[name][1]
-        assert [c.value for c in got] == [c.value for c in ref]
-        assert [c.fill.fgColor.rgb for c in got] == [c.fill.fgColor.rgb for c in ref]
-        assert [c.font.color.rgb for c in got] == [c.font.color.rgb for c in ref]
-    results = workbook["Results"]
-    assert results.max_row == 2 and results["B2"].value == "student@example.com"
-    assert results["A2"].data_type == "s"  # formula injection is neutralized
-    assert results["K2"].number_format == "0.00%"
-    answers = workbook["Answers"]
-    assert answers.max_row == 2 and answers["C2"].value == "Q1" and answers["I2"].value == "Yes"
-    assert answers.max_column == 9
-    topics = workbook["Topic Scores"]
-    assert topics["D2"].value == "Algebraic Formulas/Identities" and topics["G2"].value == 1.0
+    # Exact admin download format: one sheet, 27 columns, navy + teal headers.
+    assert workbook.sheetnames == ["Diagnostic 29-Oct"]
+    sheet = workbook["Diagnostic 29-Oct"]
+    assert [cell.value for cell in sheet[1]] == list(QUIZ_HEADERS[:27])
+    assert sheet["A1"].fill.fgColor.rgb == "001F2865" and sheet["A1"].font.color.rgb == "00FFFFFF"
+    assert sheet["O1"].fill.fgColor.rgb == "000D8075" and sheet["T1"].fill.fgColor.rgb == "000D8075"
+    assert sheet["U1"].fill.fgColor.rgb == "001F2865"
+    assert sheet.freeze_panes == "B2" and sheet.auto_filter.ref == "A1:AA2"
+    assert sheet.row_dimensions[1].height == 58
+    assert sheet.column_dimensions["X"].width == 70
+    assert sheet["K2"].number_format == "0%"
+    assert sheet["A2"].data_type == "s"  # formula injection is neutralized
+    assert sheet["S2"].value == "2"  # student ID kept as text
+    assert sheet["U2"].value == "Q1" and sheet["Y2"].value == "B"
+    assert sheet["AA2"].value == "Yes" and sheet["AA2"].fill.fgColor.rgb == "00DCF3E6"
+    assert sheet.max_column == 27
     second = {
         **file_data,
         "group": "Uncontrolled",
@@ -379,10 +378,10 @@ def test_workbook_matches_packaged_template_and_export_zips_per_quiz(db):
             "Uncontrolled_Baseline_2026-10-29.xlsx",
         ]
         controlled = load_workbook(io.BytesIO(archive.read("Controlled_Baseline_2026-10-29.xlsx")))
-        assert controlled["Results"]["B2"].value == "student@example.com"
+        assert controlled.active["B2"].value == "student@example.com"
         uncontrolled = load_workbook(io.BytesIO(archive.read("Uncontrolled_Baseline_2026-10-29.xlsx")))
-        assert uncontrolled["Results"]["B2"].value == "second@example.com"
-        assert uncontrolled["Answers"]["G2"].value == "A"
+        assert uncontrolled.active["AA2"].value == "No"
+        assert uncontrolled.active["AA2"].fill.fgColor.rgb == "00FDE2E4"
 
 
 def test_report_api_requires_login(monkeypatch):
