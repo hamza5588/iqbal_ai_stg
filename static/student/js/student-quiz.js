@@ -124,10 +124,73 @@
   };
   /* Once a quiz has started the student can only submit it (or close the whole browser,
      which locks a strict exam). No cross button, no backdrop-click close. */
+  /* Fullscreen for the whole quiz (DIL feedback 25-11-2026). Browsers never let a page
+     forbid leaving fullscreen, so: Keyboard Lock makes a single Esc press do nothing
+     (Chrome/Edge/ChromeOS need Esc held down), and if fullscreen is left anyway a gate
+     covers the quiz until the student presses "Return to fullscreen". */
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+  }
+  function lockEscKey() {
+    try {
+      if (navigator.keyboard && typeof navigator.keyboard.lock === 'function') {
+        navigator.keyboard.lock(['Escape']).catch(function () {});
+      }
+    } catch (e) { /* unsupported */ }
+  }
+  function unlockEscKey() {
+    try { if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); } catch (e) { /* ignore */ }
+  }
+  function enterQuizFullscreen() {
+    var root = document.documentElement;
+    var req = root.requestFullscreen || root.webkitRequestFullscreen || root.msRequestFullscreen;
+    var p;
+    if (isFullscreen()) p = Promise.resolve();
+    else if (req) {
+      try { p = Promise.resolve(req.call(root)); } catch (e) { p = Promise.reject(e); }
+    } else p = Promise.reject(new Error('Fullscreen API unavailable'));
+    return p.then(function () { lockEscKey(); }).catch(function () {}).then(updateFullscreenGate);
+  }
+  function fullscreenGate() {
+    var gate = document.getElementById('lmsFullscreenGate');
+    if (gate) return gate;
+    gate = document.createElement('div');
+    gate.id = 'lmsFullscreenGate';
+    gate.setAttribute('role', 'alertdialog');
+    gate.innerHTML = '<div class="lms-fs-card"><h2>Quiz is in progress</h2>' +
+      '<p>The quiz must stay in full screen until you submit it.</p>' +
+      '<button type="button">Return to fullscreen</button></div>';
+    gate.querySelector('button').addEventListener('click', function () { enterQuizFullscreen(); });
+    document.body.appendChild(gate);
+    return gate;
+  }
+  function updateFullscreenGate() {
+    var locked = typeof window.lmsExamSecurityIsLocked === 'function' && window.lmsExamSecurityIsLocked();
+    var show = !!window.lmsQuizInProgress && !isFullscreen() && !locked;
+    if (show) fullscreenGate().classList.add('open');
+    else {
+      var gate = document.getElementById('lmsFullscreenGate');
+      if (gate) gate.classList.remove('open');
+    }
+    if (window.lmsQuizInProgress && isFullscreen()) lockEscKey();
+  }
+  document.addEventListener('fullscreenchange', updateFullscreenGate);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenGate);
+  window.lmsQuizUpdateFullscreenGate = updateFullscreenGate;
+
   function setQuizActive(on) {
     window.lmsQuizInProgress = !!on;
     var modal = document.getElementById('lmsStudentModal');
     if (modal) modal.classList.toggle('lms-quiz-active', !!on);
+    if (on) {
+      enterQuizFullscreen();
+    } else {
+      unlockEscKey();
+      updateFullscreenGate();
+      if (isFullscreen() && document.exitFullscreen) {
+        try { document.exitFullscreen().catch(function () {}); } catch (e) { /* ignore */ }
+      }
+    }
   }
   window.closeLmsStudentHub = function (force) {
     if (window.lmsQuizInProgress && force !== true) {
@@ -155,6 +218,7 @@
     if (el) el.setAttribute('data-exam-locked', '1');
     // Re-render so locked resume never shows answer UI under a stale paint.
     if (questions && questions.length) render();
+    updateFullscreenGate();
   };
   window.lmsExamOnUnlocked = async function () {
     var el = document.getElementById('lmsQuizTaking');
@@ -163,6 +227,7 @@
       try { await window.lmsExamSecurityRequestFullscreen(); } catch (e) { /* user may need gesture */ }
     }
     render();
+    updateFullscreenGate();
   };
 
   window.lmsExamSecurityOnHeartbeat = function (d) {

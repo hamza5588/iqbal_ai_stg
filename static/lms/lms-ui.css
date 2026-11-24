@@ -1662,3 +1662,26 @@ html.lms-no-copy-assess .lms-diag-surface {
 
 /* Quiz in progress: no cross button — student can only submit (DIL feedback 24-11-2026). */
 #lmsStudentModal.lms-quiz-active .lms-modal-close { display: none !important; }
+
+/* Quiz in progress: the quiz popup fills the whole screen (DIL feedback 25-11-2026). */
+#lmsStudentModal.lms-quiz-active { padding: 0; background: var(--lms-surface, #fff); }
+#lmsStudentModal.lms-quiz-active .lms-modal {
+  max-width: none; width: 100vw; height: 100vh; height: 100dvh; max-height: none;
+  border-radius: 0; box-shadow: none; animation: none;
+}
+#lmsStudentModal.lms-quiz-active .lms-modal-body { padding: 24px max(22px, calc((100vw - 980px) / 2)); }
+
+/* Fullscreen was left mid-quiz: block the quiz until the student goes back to fullscreen. */
+#lmsFullscreenGate {
+  position: fixed; inset: 0; z-index: 2147483000; display: none;
+  align-items: center; justify-content: center; padding: 24px;
+  background: rgba(15, 23, 42, 0.92); color: #fff; text-align: center;
+}
+#lmsFullscreenGate.open { display: flex; }
+#lmsFullscreenGate .lms-fs-card { max-width: 460px; }
+#lmsFullscreenGate h2 { margin: 0 0 10px; font-size: 1.5rem; }
+#lmsFullscreenGate p { margin: 0 0 18px; line-height: 1.5; }
+#lmsFullscreenGate button {
+  border: 0; border-radius: 10px; padding: 14px 26px; font-size: 1.05rem; font-weight: 700;
+  background: #22c55e; color: #fff; cursor: pointer;
+}
