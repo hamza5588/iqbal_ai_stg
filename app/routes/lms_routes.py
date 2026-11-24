@@ -450,6 +450,7 @@ def create_quiz_from_pdf():
         assessment_type="quiz",
         creation_mode="pdf_ai",
         time_limit_minutes=time_limit_minutes,
+        security_mode="strict",  # teacher class quizzes default to Strict (DIL 24-11-2026)
     )
 
     try:
@@ -1718,6 +1719,7 @@ def quizzes():
         description=body.get("description"),
         creation_mode=body.get("creation_mode", "manual"),
         time_limit_minutes=time_limit_minutes,
+        security_mode="strict",  # teacher class quizzes default to Strict (DIL 24-11-2026)
     )
     return json_success(
         {

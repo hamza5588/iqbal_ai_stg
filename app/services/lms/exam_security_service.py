@@ -4,7 +4,8 @@ Modes
 -----
 - ``standard``: soft browser controls + server logging/heartbeat/events.
 - ``supervised``: same soft lock + optional exam window.
-- ``strict``: soft lock + server LOCK on tab/focus/fullscreen leave; teacher unlock.
+- ``strict``: server LOCK only when the student closes the browser/tab mid-exam and
+  re-opens it; teacher unlock. Clicking outside / switching focus never locks.
 - Legacy ``seb`` values in the DB are treated as ``standard`` (SEB removed).
 
 Residual risks: not OS lockdown; phones / other accounts / some ChromeOS shortcuts
@@ -41,13 +42,16 @@ SECURITY_MODES = ("standard", "supervised", "strict")
 # Legacy DB values accepted then normalized away from third-party SEB.
 _LEGACY_SEB_MODES = frozenset({"seb"})
 ACTIVE_ATTEMPT_STATUSES = frozenset({"in_progress", "locked"})
-STRICT_LOCK_EVENTS = frozenset({"tab_hidden", "window_blur", "fullscreen_exit", "focus_loss"})
+# DIL feedback 24-11-2026: side clicks / focus loss locked students out. Only a real
+# browser close (detected client-side on re-open) locks a strict exam now.
+STRICT_LOCK_EVENTS = frozenset({"browser_closed"})
 EVENT_TYPES = frozenset(
     {
         "fullscreen_exit",
         "tab_hidden",
         "window_blur",
         "reload",
+        "browser_closed",
         "session_conflict",
         "seb_verify_failed",
         "seb_verify_ok",

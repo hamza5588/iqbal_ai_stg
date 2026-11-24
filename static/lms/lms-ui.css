@@ -1659,3 +1659,6 @@ html.lms-no-copy-assess .lms-diag-surface {
 .lms-math-content[dir="rtl"] .katex { direction: ltr; unicode-bidi: isolate; }
 .lms-math-content[dir="rtl"] ul,
 .lms-math-content[dir="rtl"] ol { padding-right: 1.4em; padding-left: 0; }
+
+/* Quiz in progress: no cross button — student can only submit (DIL feedback 24-11-2026). */
+#lmsStudentModal.lms-quiz-active .lms-modal-close { display: none !important; }

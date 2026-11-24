@@ -34,7 +34,7 @@
 </div>
 
 <!-- Quiz taking (class assignments + learning-path quizzes) -->
-<div id="lmsStudentModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this)closeLmsStudentHub()">
+<div id="lmsStudentModal" class="lms-modal-backdrop hidden" onclick="if(event.target===this && !window.lmsQuizInProgress)closeLmsStudentHub()">
   <div class="lms-modal lms-modal-lg" role="dialog" aria-modal="true">
     <div class="lms-modal-header">
       <h2 id="lmsStudentModalTitle">Quiz</h2>

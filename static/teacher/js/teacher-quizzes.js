@@ -128,54 +128,23 @@
   }
 
   function securityPanelHtml(z) {
-    var sec = z.security || {};
-    var mode = sec.security_mode || z.security_mode || 'standard';
-    if (mode === 'seb') mode = 'standard';
-    var allowResume = sec.allow_resume !== false;
-    var warnFocus = sec.warn_on_focus_loss !== false;
-    var autoSubmit = sec.auto_submit_on_expiry !== false;
-    var maxInt = sec.max_interruptions == null ? '' : String(sec.max_interruptions);
-    var winStart = sec.exam_window_start ? String(sec.exam_window_start).slice(0, 16) : '';
-    var winEnd = sec.exam_window_end ? String(sec.exam_window_end).slice(0, 16) : '';
-    if (winStart.indexOf('T') === -1 && winStart.length >= 16) winStart = winStart.replace(' ', 'T');
-    if (winEnd.indexOf('T') === -1 && winEnd.length >= 16) winEnd = winEnd.replace(' ', 'T');
+    // DIL feedback 24-11-2026: one simple control. Strict is the only mode offered;
+    // the exam locks only if a student closes the browser, and the teacher unlocks here.
     return '<div class="td-exam-security" id="tdExamSecurity-' + z.id + '" data-quiz-id="' + z.id + '">' +
-      '<h4 class="td-exam-security-title"><i class="fas fa-shield-halved"></i> Exam security (IqbalAI only)</h4>' +
-      '<p class="td-help" style="margin:0 0 12px;">No third-party install. Soft lock = warnings. Strict = lock exam on tab/app leave; you unlock &amp; resume. Timer keeps running while locked.</p>' +
+      '<h4 class="td-exam-security-title"><i class="fas fa-shield-halved"></i> Exam security</h4>' +
       '<div class="td-exam-security-grid">' +
         '<div class="td-field">' +
           '<label for="tdSecMode-' + z.id + '">Security mode</label>' +
           '<select id="tdSecMode-' + z.id + '">' +
-            '<option value="standard"' + (mode === 'standard' ? ' selected' : '') + '>Soft lock — normal browser</option>' +
-            '<option value="supervised"' + (mode === 'supervised' ? ' selected' : '') + '>Supervised — soft lock + exam window</option>' +
-            '<option value="strict"' + (mode === 'strict' ? ' selected' : '') + '>Strict — lock on leave (Chromebook labs)</option>' +
+            '<option value="strict" selected>Strict — lock on leave (Chromebook labs)</option>' +
           '</select>' +
-        '</div>' +
-        '<div class="td-field td-check-stack">' +
-          '<label class="td-check-inline"><input type="checkbox" id="tdSecAllowResume-' + z.id + '"' + (allowResume ? ' checked' : '') + '> Allow resume after interruption</label>' +
-          '<label class="td-check-inline"><input type="checkbox" id="tdSecWarnFocus-' + z.id + '"' + (warnFocus ? ' checked' : '') + '> Warn / log focus &amp; tab switches</label>' +
-          '<label class="td-check-inline"><input type="checkbox" id="tdSecAutoSubmit-' + z.id + '"' + (autoSubmit ? ' checked' : '') + '> Auto-submit when time expires (server)</label>' +
-        '</div>' +
-        '<div class="td-field">' +
-          '<label for="tdSecMaxInt-' + z.id + '">Max recorded interruptions (optional)</label>' +
-          '<input id="tdSecMaxInt-' + z.id + '" type="number" min="0" step="1" placeholder="Unlimited" value="' + U.esc(maxInt) + '">' +
-          '<p class="td-help">Informational threshold for teacher review — does not auto-fail.</p>' +
-        '</div>' +
-        '<div class="td-field">' +
-          '<label for="tdSecWinStart-' + z.id + '">Exam window start (UTC, optional)</label>' +
-          '<input id="tdSecWinStart-' + z.id + '" type="datetime-local" value="' + U.esc(winStart) + '">' +
-        '</div>' +
-        '<div class="td-field">' +
-          '<label for="tdSecWinEnd-' + z.id + '">Exam window end (UTC, optional)</label>' +
-          '<input id="tdSecWinEnd-' + z.id + '" type="datetime-local" value="' + U.esc(winEnd) + '">' +
         '</div>' +
       '</div>' +
       '<div class="td-exam-security-actions">' +
-        '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.saveSecurity(' + z.id + ')"><i class="fas fa-save"></i> Save security settings</button>' +
-        '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.toggleLiveSecurity(' + z.id + ')"><i class="fas fa-bell"></i> Live security</button>' +
+        '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.saveSecurity(' + z.id + ')"><i class="fas fa-save"></i> Save</button>' +
+        '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.toggleLiveSecurity(' + z.id + ')"><i class="fas fa-unlock"></i> Unlock students</button>' +
       '</div>' +
       '<div id="tdLiveSec-' + z.id + '" class="td-live-security" hidden></div>' +
-      '<p class="td-help td-exam-security-note"><b>Note:</b> Not OS lockdown. Strict Mode detects browser tab/focus/fullscreen leave — phones and some ChromeOS shortcuts may still be undetectable. Use lab supervision.</p>' +
     '</div>';
   }
 
@@ -257,19 +226,8 @@
   }
 
   async function saveSecurity(id) {
-    var mode = (($('tdSecMode-' + id) || {}).value) || 'standard';
-    if (mode === 'seb') mode = 'standard';
-    var maxRaw = (($('tdSecMaxInt-' + id) || {}).value || '').trim();
-    var payload = {
-      security_mode: mode,
-      require_seb: false,
-      allow_resume: !!($('tdSecAllowResume-' + id) && $('tdSecAllowResume-' + id).checked),
-      warn_on_focus_loss: !!($('tdSecWarnFocus-' + id) && $('tdSecWarnFocus-' + id).checked),
-      auto_submit_on_expiry: !!($('tdSecAutoSubmit-' + id) && $('tdSecAutoSubmit-' + id).checked),
-      max_interruptions: maxRaw === '' ? null : parseInt(maxRaw, 10),
-      exam_window_start: _dtLocalToIso((($('tdSecWinStart-' + id) || {}).value) || ''),
-      exam_window_end: _dtLocalToIso((($('tdSecWinEnd-' + id) || {}).value) || ''),
-    };
+    var mode = 'strict';
+    var payload = { security_mode: mode, require_seb: false };
     try {
       var updated = await lmsApi('/api/lms/quizzes/' + id, {
         method: 'PATCH',
@@ -283,7 +241,7 @@
         row.require_seb = false;
       }
       if (state.previews[id] && updated.security) state.previews[id].security = updated.security;
-      U.toast('Exam security settings saved (' + mode + ')');
+      U.toast('Exam security saved (Strict)');
       render();
     } catch (err) {
       U.toast(err.message || 'Could not save security settings', 'error');
@@ -356,21 +314,19 @@
         return;
       }
       panel.innerHTML =
-        '<div class="td-live-sec-head"><strong>Live security</strong> — ' +
+        '<div class="td-live-sec-head"><strong>Students in this quiz</strong> — ' +
         (data.locked_count || 0) + ' locked / ' + (data.active_count || 0) + ' active</div>' +
         '<div class="td-live-sec-list">' +
         attempts.map(function (a) {
           var qn = a.current_question_index != null ? ('Q' + (a.current_question_index + 1)) : '—';
           return '<div class="td-live-sec-row' + (a.is_locked ? ' locked' : '') + '">' +
             '<div><b>' + U.esc(a.student_name || ('#' + a.student_id)) + '</b> · ' +
-            U.esc(a.status) + (a.lock_reason ? (' · ' + U.esc(a.lock_reason)) : '') +
+            (a.is_locked ? 'Locked — closed the browser' : 'Taking the quiz') +
             ' · ' + qn + '</div>' +
             '<div class="td-live-sec-actions">' +
             (a.is_locked
               ? '<button type="button" class="td-btn td-btn-primary td-btn-sm" onclick="tdQuizzes.unlockAttempt(' + a.attempt_id + ',' + quizId + ')">Unlock &amp; Resume</button>'
               : '') +
-            '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.extendAttempt(' + a.attempt_id + ',' + quizId + ')">Extend +5 min</button>' +
-            '<button type="button" class="td-btn td-btn-outline td-btn-sm" onclick="tdQuizzes.viewViolations(' + a.attempt_id + ')">Violations</button>' +
             '</div></div>';
         }).join('') +
         '</div>';

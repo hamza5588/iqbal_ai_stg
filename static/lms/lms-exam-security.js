@@ -84,7 +84,7 @@
       box.innerHTML =
         '<div class="lms-exam-locked-card">' +
           '<h2>EXAM LOCKED</h2>' +
-          '<p>You left the exam window. Your teacher has been notified.</p>' +
+          '<p>You closed the browser during the exam. Your teacher has been notified.</p>' +
           '<p>Please wait for your teacher to unlock your exam.</p>' +
           '<p class="lms-exam-locked-reason"></p>' +
         '</div>';
@@ -140,7 +140,9 @@
     var qi = currentQ();
     if (qi != null) ctx.current_question_index = qi;
     var now = Date.now();
-    if (isStrict() && (eventType === 'tab_hidden' || eventType === 'window_blur' || eventType === 'fullscreen_exit')) {
+    // Only a real browser/tab close (detected on re-open) locks a strict exam.
+    // Clicking outside / switching focus is logged but never locks (DIL feedback 24-11-2026).
+    if (isStrict() && eventType === 'browser_closed') {
       if (now - state.lastLockPostAt < 800) return Promise.resolve(null);
       state.lastLockPostAt = now;
       // Fail closed locally while waiting for server
@@ -158,7 +160,7 @@
       handleServerLock(d);
       return d;
     }).catch(function () {
-      if (isStrict()) {
+      if (isStrict() && eventType === 'browser_closed') {
         state.eventQueue.push({ eventType: eventType, severity: severity, message: message, context: ctx });
         showLockedOverlay(eventType);
       }
@@ -167,7 +169,7 @@
 
   function isLeaveEventType(eventType) {
     return eventType === 'tab_hidden' || eventType === 'window_blur' ||
-      eventType === 'fullscreen_exit' || eventType === 'focus_loss';
+      eventType === 'fullscreen_exit' || eventType === 'focus_loss' || eventType === 'browser_closed';
   }
 
   function flushQueue() {
@@ -315,6 +317,16 @@
       window.lmsSetAssessmentCopyGuard(true);
     }
     if (state.locked) showLockedOverlay(opts.lock_reason || 'exam locked');
+    // Browser-close detection: sessionStorage survives a reload of the same tab but is
+    // wiped when the browser/tab is closed. Resuming an attempt without our marker means
+    // the exam was closed and re-opened → strict lock (teacher unlock).
+    var openKey = 'lmsExamOpen:' + state.attemptId;
+    var hadMarker = false;
+    try { hadMarker = sessionStorage.getItem(openKey) === '1'; } catch (e) { hadMarker = true; }
+    if (!state.locked && opts.resumed && !hadMarker && isStrict()) {
+      postEvent('browser_closed', 'warn', 'Browser closed during exam and re-opened');
+    }
+    try { sessionStorage.setItem(openKey, '1'); } catch (e) { /* ignore */ }
     if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
     state.heartbeatTimer = setInterval(heartbeat, 5000);
     heartbeat();
@@ -324,6 +336,9 @@
     if (state.heartbeatTimer) clearInterval(state.heartbeatTimer);
     state.heartbeatTimer = null;
     unbindListeners();
+    if (state.attemptId) {
+      try { sessionStorage.removeItem('lmsExamOpen:' + state.attemptId); } catch (e) { /* ignore */ }
+    }
     state.attemptId = null;
     state.sessionToken = null;
     state.locked = false;

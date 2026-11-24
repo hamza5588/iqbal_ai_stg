@@ -121,15 +121,15 @@ def test_policy_strict_flags(db):
     assert p["is_strict"] and p["lock_on_leave"] and p["require_fullscreen"]
 
 
-def test_tab_hidden_locks_strict_attempt(db, monkeypatch):
+def test_browser_closed_locks_strict_attempt(db, monkeypatch):
     a, qs, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
     attempt.current_question_index = 1
     db.commit()
-    row = ess.record_event(attempt, "tab_hidden", severity="warn", message="left tab")
+    row = ess.record_event(attempt, "browser_closed", severity="warn", message="left tab")
     db.refresh(attempt)
     assert attempt.status == "locked"
-    assert attempt.lock_reason == "tab_hidden"
+    assert attempt.lock_reason == "browser_closed"
     assert attempt.locked_at is not None
     assert getattr(row, "_strict_locked", False) is True
     # Answers rejected while locked
@@ -140,7 +140,7 @@ def test_tab_hidden_locks_strict_attempt(db, monkeypatch):
 def test_standard_mode_does_not_lock(db, monkeypatch):
     a, _, student, _, _ = _seed(db, security_mode="standard")
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "in_progress"
 
@@ -148,10 +148,10 @@ def test_standard_mode_does_not_lock(db, monkeypatch):
 def test_duplicate_lock_idempotent(db, monkeypatch):
     a, _, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     locked_at = attempt.locked_at
-    ess.record_event(attempt, "window_blur", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked"
     assert attempt.locked_at == locked_at
@@ -169,7 +169,7 @@ def test_teacher_unlock_resumes_same_attempt_and_answers(db, monkeypatch):
     attempt_service.save_answer(attempt.id, qs[0].id, selected_option_index=1)
     attempt.current_question_index = 2
     db.commit()
-    ess.record_event(attempt, "fullscreen_exit", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked"
     aid = attempt.id
@@ -184,7 +184,7 @@ def test_teacher_unlock_resumes_same_attempt_and_answers(db, monkeypatch):
 def test_unauthorized_unlock_helper(db, monkeypatch):
     a, _, student, _, outsider = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     assert ess.teacher_may_manage_attempt(outsider.id, attempt, role="teacher") is False
     assert ess.teacher_may_manage_attempt(1, attempt, role="teacher") is True
 
@@ -195,7 +195,7 @@ def test_timer_continues_during_lock(db, monkeypatch):
     deadline = datetime.utcnow() + timedelta(minutes=20)
     attempt.expires_at = deadline
     db.commit()
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked"
     assert attempt.expires_at == deadline
@@ -226,7 +226,7 @@ def test_expire_while_locked(db, monkeypatch):
     a, qs, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
     attempt_service.save_answer(attempt.id, qs[0].id, selected_option_index=1)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked"
     attempt.expires_at = datetime.utcnow() - timedelta(seconds=5)
@@ -250,7 +250,7 @@ def test_expire_while_locked(db, monkeypatch):
 def test_refresh_retains_locked_state(db, monkeypatch):
     a, _, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     again, resumed, done = attempt_service.start_attempt(student.id, a.id)
     assert resumed and not done
     assert again.id == attempt.id
@@ -268,10 +268,10 @@ def test_second_leave_while_locked_stays_locked(db, monkeypatch):
     """Server must stay locked when student leaves again after the first strict lock."""
     a, _, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked"
-    ess.record_event(attempt, "window_blur", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked"
     hb = attempt_service.heartbeat(attempt.id, session_token=attempt.session_token)
@@ -281,7 +281,7 @@ def test_second_leave_while_locked_stays_locked(db, monkeypatch):
 def test_heartbeat_while_locked_never_reports_in_progress(db, monkeypatch):
     a, _, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     for _ in range(3):
         info = attempt_service.heartbeat(attempt.id, session_token=attempt.session_token)
@@ -293,7 +293,7 @@ def test_already_locked_security_event_api_shape(db, monkeypatch):
     """POST /security-events while locked must tell the client the attempt is still locked."""
     a, _, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     payload = {
         "recorded": False,
@@ -333,7 +333,7 @@ def test_double_cross_then_continue_payload_sequence_keeps_client_lock(db, monke
     """Simulate second leave + server already_locked response + heartbeat while still locked."""
     a, _, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     state = {"locked": True, "lockUiShown": True}
     second = {
@@ -419,7 +419,7 @@ def test_refresh_resume_payload_stays_locked(db, monkeypatch):
     a, _, student, _, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
     old_token = attempt.session_token
-    ess.record_event(attempt, "fullscreen_exit", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     assert attempt.status == "locked"
     again, resumed, done = attempt_service.start_attempt(student.id, a.id)
@@ -456,7 +456,7 @@ def test_refresh_resume_payload_stays_locked(db, monkeypatch):
 def test_teacher_unlock_then_resume_clears_lock(db, monkeypatch):
     a, _, student, teacher, _ = _seed(db)
     attempt = _start(db, a, student, monkeypatch)
-    ess.record_event(attempt, "tab_hidden", severity="warn")
+    ess.record_event(attempt, "browser_closed", severity="warn")
     db.refresh(attempt)
     unlocked = ess.unlock_attempt(attempt, teacher_id=teacher.id, message="ok")
     assert unlocked.status == "in_progress"
@@ -475,3 +475,16 @@ def test_teacher_unlock_then_resume_clears_lock(db, monkeypatch):
     }
     state = _client_handle_server_lock(state, hb)
     assert state["locked"] is False
+
+
+def test_side_click_and_tab_switch_never_lock_strict(db, monkeypatch):
+    """DIL feedback 24-11-2026: focus loss / tab switch / fullscreen exit only log."""
+    a, _, student, _, _ = _seed(db)
+    attempt = _start(db, a, student, monkeypatch)
+    for ev in ("window_blur", "tab_hidden", "fullscreen_exit", "focus_loss", "reload"):
+        ess.record_event(attempt, ev, severity="warn")
+        db.refresh(attempt)
+        assert attempt.status == "in_progress", ev
+    ess.record_event(attempt, "browser_closed", severity="warn")
+    db.refresh(attempt)
+    assert attempt.status == "locked" and attempt.lock_reason == "browser_closed"

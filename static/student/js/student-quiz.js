@@ -122,7 +122,19 @@
     }
     window.sdShowView('classes');
   };
-  window.closeLmsStudentHub = function () {
+  /* Once a quiz has started the student can only submit it (or close the whole browser,
+     which locks a strict exam). No cross button, no backdrop-click close. */
+  function setQuizActive(on) {
+    window.lmsQuizInProgress = !!on;
+    var modal = document.getElementById('lmsStudentModal');
+    if (modal) modal.classList.toggle('lms-quiz-active', !!on);
+  }
+  window.closeLmsStudentHub = function (force) {
+    if (window.lmsQuizInProgress && force !== true) {
+      if (typeof lmsShowToast === 'function') lmsShowToast('Please finish and submit the quiz first.', 'error');
+      return;
+    }
+    setQuizActive(false);
     clearQuizTimer();
     if (quizDwell && questions.length) syncQuizDwell(currentQ);
     if (quizDwell) quizDwell.stop();
@@ -223,9 +235,11 @@
       }
       // Apply lock state BEFORE loading questions so render() never paints unlocked UI.
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(true);
+      setQuizActive(true);
       if (typeof window.lmsExamSecurityStart === 'function') {
         window.lmsExamSecurityStart({
           attemptId: attemptId,
+          resumed: !!d.resumed,
           sessionToken: d.session_token,
           security: sec,
           requestFullscreen: !attemptLocked,
@@ -240,6 +254,7 @@
       lmsOpenModal('lmsStudentModal');
       startQuizTimer();
     } catch (err) {
+      setQuizActive(false);
       var msg = err.message || 'Could not start quiz';
       if (typeof lmsShowToast === 'function') lmsShowToast(msg, 'error'); else alert(msg);
     } finally {
@@ -288,7 +303,7 @@
     var el = document.getElementById('lmsQuizTaking');
     if (!questions.length) {
       el.innerHTML = '<p class="lms-error">No questions in this quiz.</p>' +
-        '<button type="button" class="sd-btn sd-btn-outline" onclick="exitLmsQuizTaking()">Close</button>';
+        '<button type="button" class="sd-btn sd-btn-outline" onclick="exitLmsQuizTaking(true)">Close</button>';
       return;
     }
     if (typeof window.lmsExamSecurityIsLocked === 'function' && window.lmsExamSecurityIsLocked()) {
@@ -297,7 +312,7 @@
         (remainingSeconds != null ? '<span id="lmsQuizTimer" class="sd-timer" style="margin-left:auto;"></span>' : '') +
         '</div>' +
         '<div class="lms-exam-locked-inline"><h3>EXAM LOCKED</h3>' +
-        '<p>You left the exam window. Your teacher has been notified.</p>' +
+        '<p>You closed the browser during the exam. Your teacher has been notified.</p>' +
         '<p>Please wait for your teacher to unlock your exam.</p></div>';
       return;
     }
@@ -463,6 +478,7 @@
       });
       if (quizDwell) quizDwell.stop();
       if (typeof window.lmsExamSecurityStop === 'function') window.lmsExamSecurityStop();
+      setQuizActive(false);
       var shownFor = Date.now() - startedAt;
       if (shownFor < 700) await new Promise(function (r) { setTimeout(r, 700 - shownFor); });
       if (typeof window.lmsSetAssessmentCopyGuard === 'function') window.lmsSetAssessmentCopyGuard(false);

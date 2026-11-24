@@ -85,6 +85,7 @@ def create_assessment(
     creation_mode: str = "manual",
     time_limit_minutes: Optional[int] = None,
     grade_level: Optional[str] = None,
+    security_mode: Optional[str] = None,
 ) -> Assessment:
     if assessment_type not in ("diagnostic", "quiz"):
         raise LMSValidationError("assessment_type must be diagnostic or quiz")
@@ -104,6 +105,8 @@ def create_assessment(
         status="draft",
         time_limit_minutes=time_limit_minutes,
     )
+    if security_mode:
+        assessment.security_mode = security_mode
     db.add(assessment)
     db.commit()
     db.refresh(assessment)
