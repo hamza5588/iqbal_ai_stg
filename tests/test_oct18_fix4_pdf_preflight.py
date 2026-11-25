@@ -435,6 +435,10 @@ def test_create_lesson_mostly_scanned_still_rejected(lesson_client):
     assert processed == []
 
 
-def test_rag_ingest_uses_default_strict_preflight():
+def test_rag_ingest_allows_scans_only_when_ocr_is_available():
+    # Scanned PDFs pass the RAG ingest preflight only when OCR can read them;
+    # otherwise the preflight stays strict.
     src = (ROOT / "app" / "routes" / "rag_routes.py").read_text(encoding="utf-8")
-    assert "preflight = _preflight_check_pdf(file_bytes)" in src
+    assert "allow_scanned = ocr_available()" in src
+    assert "preflight = _preflight_check_pdf(file_bytes, allow_scanned=allow_scanned)" in src
+    assert "allow_scanned = False" in src

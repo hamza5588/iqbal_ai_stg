@@ -228,7 +228,15 @@ def extract_pdf_text_like_ingest(
                     "truncated, or partially corrupted file, so the document may be missing content."
                 )
 
-        if len(valid_pages) == 0:
+        try:
+            from app.utils.pdf_ocr import ocr_available as _ocr_available
+
+            scan_ocr_ready = _ocr_available()
+        except Exception:  # noqa: BLE001
+            scan_ocr_ready = False
+
+        # Same as ingest_pdf: with OCR installed, scanned pages are read further below.
+        if len(valid_pages) == 0 and not scan_ocr_ready:
             scanned_hint = ""
             try:
                 import fitz
@@ -318,6 +326,27 @@ def extract_pdf_text_like_ingest(
         for doc in docs:
             if doc.page_content:
                 doc.page_content = _sanitize_pdf_text(doc.page_content)
+
+        # Scanned pages read with OCR (same as ingest_pdf).
+        if scan_ocr_ready:
+            ocr_filled = 0
+            try:
+                from app.utils.pdf_ocr import apply_ocr_to_docs
+
+                ocr_filled = apply_ocr_to_docs(temp_path, docs)
+            except Exception as ocr_exc:  # noqa: BLE001
+                logger.warning("Inspector OCR skipped: %s", ocr_exc)
+            if ocr_filled:
+                for doc in docs:
+                    if doc.page_content:
+                        doc.page_content = _sanitize_pdf_text(doc.page_content)
+                loader_used = f"{loader_used}+ocr"
+                warnings.append(f"{ocr_filled} scanned page(s) were read with OCR.")
+            if not any(d.page_content and d.page_content.strip() for d in docs):
+                raise ValueError(
+                    f"PDF loaded with {loader_used} but contains no extractable text content. "
+                    "This PDF appears to be scanned and OCR could not read any text from it."
+                )
 
         # pdfplumber table addendum (same as ingest_pdf)
         if pdfplumber_available:

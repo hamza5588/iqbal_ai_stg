@@ -196,14 +196,10 @@ def _run_hybrid_vision_extraction(
 
 
 def _extract_pdf_plain_text(pdf_bytes: bytes) -> str:
-    """Best-effort native text layer (no OCR). Empty for pure image scans."""
-    import fitz
+    """Native text layer; scanned pages are read with OCR when it is installed."""
+    from app.utils.pdf_ocr import pdf_plain_text
 
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    try:
-        return "\n".join((page.get_text() or "") for page in doc)
-    finally:
-        doc.close()
+    return pdf_plain_text(pdf_bytes)
 
 
 def _generate_mcqs_from_document_content(

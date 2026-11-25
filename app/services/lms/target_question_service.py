@@ -22,12 +22,15 @@ def _recover_from_pages(pdf_bytes, full_text, part, missing_numbers, answer_map)
 
     start = full_text.find(part)
     end = start + len(part)
+    from app.utils.pdf_ocr import pdf_page_texts
+
+    # Same per-page texts (scanned pages OCR'd) that built ``full_text``, so offsets match.
+    page_texts = pdf_page_texts(pdf_bytes)
     with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
         offset = 0
         relevant = {}
         segment_pages = set()
-        for index, page in enumerate(document):
-            page_text = page.get_text()
+        for index, page_text in enumerate(page_texts):
             page_end = offset + len(page_text)
             if page_end > start and offset < end:
                 segment_pages.add(index)
@@ -48,7 +51,7 @@ def _recover_from_pages(pdf_bytes, full_text, part, missing_numbers, answer_map)
                 if page_index not in segment_pages:
                     continue
                 page = document[page_index]
-                content.append({"type": "text", "text": page.get_text()})
+                content.append({"type": "text", "text": page_texts[page_index]})
                 pixmap = page.get_pixmap(dpi=120)
                 data = base64.b64encode(pixmap.tobytes("jpeg")).decode("ascii")
                 content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + data}})

@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
     git \
     libreoffice \
     ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    tesseract-ocr-urd \
     && rm -rf /var/lib/apt/lists/*
 
 ENV HF_HUB_DISABLE_XET=1

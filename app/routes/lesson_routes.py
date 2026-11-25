@@ -602,7 +602,9 @@ def create_lesson():
             # extraction, table parsing or embedding work starts.
             if file_ext == '.pdf':
                 from app.utils.pdf_preflight import preflight_check_pdf
-                preflight = preflight_check_pdf(file_bytes_for_rag)
+                from app.utils.pdf_ocr import ocr_available
+                # Scanned PDFs pass when OCR is installed: their pages are read with it.
+                preflight = preflight_check_pdf(file_bytes_for_rag, allow_scanned=ocr_available())
                 if not preflight.get('ok'):
                     return jsonify({'error': preflight['message'], 'code': preflight['code']}), 400
 

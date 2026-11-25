@@ -2367,7 +2367,17 @@ def ingest_pdf(
                     "If answers seem incomplete, try re-exporting or re-uploading the original file."
                 )
 
-        if len(valid_pages) == 0:
+        try:
+            from app.utils.pdf_ocr import ocr_available as _ocr_available
+
+            scan_ocr_ready = _ocr_available()
+        except Exception as ocr_check_exc:  # noqa: BLE001
+            logger.warning("OCR availability check failed: %s", ocr_check_exc)
+            scan_ocr_ready = False
+
+        # With OCR on this host, an all-image (scanned) PDF is read further below
+        # instead of being rejected here.
+        if len(valid_pages) == 0 and not scan_ocr_ready:
             # Check if PDF might be scanned (image-based)
             scanned_hint = ""
             try:
@@ -2520,6 +2530,47 @@ def ingest_pdf(
         for doc in docs:
             if doc.page_content:
                 doc.page_content = _sanitize_pdf_text(doc.page_content)
+
+        # Scanned pages: no text layer (or only hidden text, stripped above) but an
+        # image. Read them with OCR so scanned books can be used as lessons.
+        ocr_pages_filled = 0
+        if scan_ocr_ready:
+            try:
+                from app.utils.pdf_ocr import apply_ocr_to_docs
+
+                ocr_pages_filled = apply_ocr_to_docs(temp_path, docs, _send_progress)
+            except Exception as ocr_exc:  # noqa: BLE001
+                logger.warning("OCR of scanned pages skipped: %s", ocr_exc, exc_info=True)
+            if ocr_pages_filled:
+                for doc in docs:
+                    if doc.page_content:
+                        doc.page_content = _sanitize_pdf_text(doc.page_content)
+                loader_used = f"{loader_used}+ocr"
+                logger.info(
+                    "RAG ingest: OCR text used for %d of %d page(s) (thread %s)",
+                    ocr_pages_filled, len(docs), thread_id_str,
+                )
+
+        valid_pages = [d for d in docs if d.page_content and d.page_content.strip()]
+        if not valid_pages:
+            raise ValueError(
+                f"PDF loaded with {loader_used} but contains no extractable text content. "
+                "This PDF appears to be scanned and OCR could not read any text from it."
+            )
+        if ocr_pages_filled:
+            missing_page_count = num_pages - len(valid_pages)
+            partial_content_warning = None
+            if missing_page_count and missing_page_count / num_pages >= 0.3:
+                partial_content_warning = (
+                    f"Only {len(valid_pages)} of {num_pages} pages in this PDF had readable text — "
+                    f"the other {missing_page_count} came back empty, even after OCR. "
+                    "The document may be missing content."
+                )
+            mixed_content_warning = (
+                f"{ocr_pages_filled} scanned page(s) in this PDF were read with OCR. "
+                "OCR can misread some words, symbols or formulas, so check important details "
+                "against the original."
+            )
 
         _send_progress("metadata", 30, "Adding metadata to pages...")
         ingest_page_label_map: Dict[int, int] = {}

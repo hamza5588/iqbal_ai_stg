@@ -252,7 +252,11 @@ def test_upload_validation_duplicates_scanned_and_cross_assessment_scope(env):
     assert r.status_code == 400
     scanned = _ok(_upload(t, aid, "learning", "scanned_image_only.pdf"), 202)
     doc = env["session"].get(sm.ScenarioDocument, scanned["id"])
-    assert doc.status == "failed" and "OCR is not available" in doc.error_message
+    from app.utils.pdf_ocr import ocr_available
+
+    # The fixture image holds no text: it fails with OCR too, with its own message.
+    expected = "even after reading the scanned pages with OCR" if ocr_available() else "OCR is not available"
+    assert doc.status == "failed" and expected in doc.error_message
 
     # a second assessment never sees the first one's chunks
     b = _ok(t.post("/api/lms/scenario/assessments", json={"title": "Other", "class_id": env["class_id"]}), 201)

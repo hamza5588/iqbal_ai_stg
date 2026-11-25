@@ -192,9 +192,12 @@ def extract_pages(data: bytes) -> List[str]:
             raise LMSValidationError("The PDF has no pages.")
         if pdf.page_count > MAX_PAGES:
             raise LMSValidationError(f"The PDF has {pdf.page_count} pages; the limit is {MAX_PAGES}.")
-        return [page.get_text("text") or "" for page in pdf]
     finally:
         pdf.close()
+    # Text layer per page; scanned pages are read with OCR when it is installed.
+    from app.utils.pdf_ocr import pdf_page_texts
+
+    return pdf_page_texts(data)
 
 
 _HEADING_RE = re.compile(r"^(?:\d+(?:\.\d+)*[.)]?\s+)?[A-Z][^.!?]{2,90}$")
@@ -355,14 +358,23 @@ def process_document(document_id: int) -> ScenarioDocument:
         doc.page_count = len(pages)
         warnings: List[str] = []
         text_pages = [p for p in pages if len(p.strip()) >= MIN_TEXT_CHARS_PER_PAGE]
+        from app.utils.pdf_ocr import ocr_available
+
+        ocr_ready = ocr_available()
         if not text_pages:
+            if ocr_ready:
+                raise LMSValidationError(
+                    "No readable text was found, even after reading the scanned pages with OCR. "
+                    "Upload a clearer scan or a text-based PDF."
+                )
             raise LMSValidationError(
                 "No readable text was found. This looks like a scanned or image-only PDF; "
-                "OCR is not available for assessment documents, so upload a text-based PDF."
+                "OCR is not available on this server, so upload a text-based PDF."
             )
         empty = len(pages) - len(text_pages)
         if empty:
-            warnings.append(f"{empty} of {len(pages)} pages had no readable text (scanned images are skipped).")
+            skipped = "could not be read" if ocr_ready else "were skipped (scanned images)"
+            warnings.append(f"{empty} of {len(pages)} pages had no readable text and {skipped}.")
 
         chunks = chunk_pages(pages)
         if not chunks:

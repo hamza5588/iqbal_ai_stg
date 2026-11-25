@@ -703,15 +703,12 @@ def pair_questions_answers(extraction: PDFExtractionResult) -> List[QuestionAnsw
 
 
 def pdf_bytes_to_plain_text(pdf_bytes: bytes) -> str:
-    """Best-effort native text layer (no OCR). Empty for pure image scans.
+    """Native text layer; scanned pages are read with OCR when it is installed.
 
     Used by diagnostic target ingest (`diagnostic_pdf_service`) before
-    `index_target_questions`.
+    `index_target_questions`. Page texts come from the same cached helper that
+    `target_question_service` uses, so page offsets into this text line up.
     """
-    import fitz
+    from app.utils.pdf_ocr import pdf_plain_text
 
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    try:
-        return "\n".join((page.get_text() or "") for page in doc)
-    finally:
-        doc.close()
+    return pdf_plain_text(pdf_bytes)

@@ -468,7 +468,14 @@ def ingest():
         # Reject PDFs that can never be ingested (corrupted, password-protected,
         # or scanned/image-only with no selectable text) right now, instead of
         # queuing them for background processing and only finding out later.
-        preflight = _preflight_check_pdf(file_bytes)
+        # Scanned PDFs pass when OCR is installed: ingest_pdf reads those pages.
+        try:
+            from app.utils.pdf_ocr import ocr_available
+            allow_scanned = ocr_available()
+        except Exception as ocr_err:  # noqa: BLE001
+            logger.warning("OCR availability check failed: %s", ocr_err)
+            allow_scanned = False
+        preflight = _preflight_check_pdf(file_bytes, allow_scanned=allow_scanned)
         if not preflight['ok']:
             return jsonify({'error': preflight['message'], 'code': preflight['code']}), 400
 

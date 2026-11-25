@@ -264,6 +264,17 @@ class BaseLessonService:
                 return []
             
             documents = loader.load()
+            if filename.lower().endswith('.pdf'):
+                # Scanned pages have no text layer: read them with OCR when installed.
+                try:
+                    from app.utils.pdf_ocr import apply_ocr_to_docs, ocr_available
+
+                    if ocr_available():
+                        filled = apply_ocr_to_docs(file_path, documents)
+                        if filled:
+                            logger.info(f"OCR read {filled} scanned page(s) of {filename}")
+                except Exception as ocr_exc:
+                    logger.warning(f"OCR of scanned pages skipped for {filename}: {ocr_exc}")
             logger.info(f"Loaded {len(documents)} pages from {filename}")
             return documents
             

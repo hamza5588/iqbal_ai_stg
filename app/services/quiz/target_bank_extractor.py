@@ -198,7 +198,44 @@ def _clean(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _read_lines(doc) -> Tuple[List[Line], Dict[int, list]]:
+def _merge_ocr_rows(page_lines: List[Line]) -> List[Line]:
+    """Join OCR fragments that sit on the same visual row.
+
+    Tesseract splits a row at wide gaps ("Domain: X   |   Topic: Y" comes back as
+    several lines), which hides the metadata line from the parser. Fragments whose
+    vertical extents overlap by at least half are one row, read left to right.
+    """
+    rows: List[List[Line]] = []
+    for ln in sorted(page_lines, key=lambda l: (l.bbox[1], l.bbox[0])):
+        top, bottom = ln.bbox[1], ln.bbox[3]
+        for row in rows:
+            r_top = min(l.bbox[1] for l in row)
+            r_bottom = max(l.bbox[3] for l in row)
+            overlap = min(bottom, r_bottom) - max(top, r_top)
+            if overlap >= 0.5 * min(bottom - top, r_bottom - r_top):
+                row.append(ln)
+                break
+        else:
+            rows.append([ln])
+    merged: List[Line] = []
+    for row in rows:
+        row.sort(key=lambda l: l.bbox[0])
+        spans: List[Span] = []
+        for i, ln in enumerate(row):
+            if i:
+                spans.append(Span(text=" ", kind="normal", bbox=ln.bbox))
+            spans.extend(ln.spans)
+        bbox = (
+            min(l.bbox[0] for l in row), min(l.bbox[1] for l in row),
+            max(l.bbox[2] for l in row), max(l.bbox[3] for l in row),
+        )
+        merged.append(Line(page=row[0].page, bbox=bbox, spans=spans))
+    return merged
+
+
+def _read_lines(doc, ocr_pages: Optional[set] = None) -> Tuple[List[Line], Dict[int, list]]:
+    """Lines with span geometry. Pages in ``ocr_pages`` (1-based) are scans read by OCR."""
+    ocr_pages = ocr_pages or set()
     lines: List[Line] = []
     hbars: Dict[int, list] = {}
     for pno in range(doc.page_count):
@@ -216,17 +253,31 @@ def _read_lines(doc) -> Tuple[List[Line], Dict[int, list]]:
                     if r.height < 1.5 and 2.0 < r.width < width * 0.45:
                         bars.append((r.x0, (r.y0 + r.y1) / 2, r.x1))
         hbars[pno + 1] = bars
-        data = page.get_text("dict", sort=False)
+        textpage = None
+        if pno + 1 in ocr_pages:
+            from app.utils.pdf_ocr import ocr_textpage
+
+            textpage = ocr_textpage(page)
+        if textpage is not None:
+            data = page.get_text("dict", sort=False, textpage=textpage)
+        else:
+            data = page.get_text("dict", sort=False)
+        page_start = len(lines)
         for block in data.get("blocks", []):
             for ln in block.get("lines", []):
                 spans_raw = [s for s in ln.get("spans", []) if s.get("text")]
                 if not spans_raw:
                     continue
+                # OCR word boxes have estimated sizes, so size/baseline-based
+                # superscript detection would invent scripts: keep them normal.
+                kinds = ["normal"] * len(spans_raw) if textpage is not None else classify_spans(spans_raw)
                 spans = [
                     Span(text=normalize_glyphs(s["text"]), kind=kind, bbox=tuple(s["bbox"]))
-                    for s, kind in zip(spans_raw, classify_spans(spans_raw))
+                    for s, kind in zip(spans_raw, kinds)
                 ]
                 lines.append(Line(page=pno + 1, bbox=tuple(ln["bbox"]), spans=spans))
+        if textpage is not None:
+            lines[page_start:] = _merge_ocr_rows(lines[page_start:])
     return lines, hbars
 
 
@@ -292,6 +343,29 @@ def parse_answer_key(pdf_bytes: bytes, pages: List[int]) -> Dict[int, AnswerKeyE
                         topic=col("topic", cells[3] if len(cells) > 3 else None) or None,
                         cognitive_level=col("cognitive level", cells[4] if len(cells) > 4 else None) or None,
                     )
+    return key
+
+
+_KEY_ROW = re.compile(r"^\s*Q?\s*(\d{1,4})\s*[.):]?\s+\(?([ABCD])\)?(?=\s|$)")
+
+
+def _answer_key_from_scans(doc, pages: List[int]) -> Dict[int, AnswerKeyEntry]:
+    """Answer letters from scanned answer-key pages ("12  B  Algebra ...").
+
+    pdfplumber sees no table on a scan, and the default OCR mode drops short table
+    cells, so key pages are re-read row by row (Tesseract psm 4). Domain / topic
+    columns are not split reliably from OCR text, so only the answer letter is kept.
+    """
+    from app.utils.pdf_ocr import ocr_page_text
+
+    key: Dict[int, AnswerKeyEntry] = {}
+    for pno in pages:
+        if not 1 <= pno <= doc.page_count:
+            continue
+        for row in ocr_page_text(doc[pno - 1], psm="4").splitlines():
+            m = _KEY_ROW.match(_clean(row))
+            if m:
+                key.setdefault(int(m.group(1)), AnswerKeyEntry(answer=m.group(2)))
     return key
 
 
@@ -485,10 +559,20 @@ _ANY_Q_MARKER = re.compile(r"(?m)^\s*(?:Q\s*)?(\d{1,4})\s*[.)]\s+\S")
 _DIL_Q_MARKER = re.compile(r"(?m)^\s*Q\s*(\d{1,4})\s*[.)]")
 
 
-def coverage_warnings(doc, questions: List[ExtractedMCQ], stop_page: Optional[int]) -> List[str]:
-    """Never skip silently: compare parsed questions with the numbers visibly printed."""
+def coverage_warnings(
+    doc,
+    questions: List[ExtractedMCQ],
+    stop_page: Optional[int],
+    ocr_text: Optional[Dict[int, str]] = None,
+) -> List[str]:
+    """Never skip silently: compare parsed questions with the numbers visibly printed.
+
+    ``ocr_text`` maps 1-based scanned page numbers to their OCR text, used instead of
+    the (empty) text layer of those pages.
+    """
+    ocr_text = ocr_text or {}
     pages = range(doc.page_count if not stop_page else stop_page - 1)
-    text = "\n".join(doc[p].get_text() for p in pages)
+    text = "\n".join(ocr_text.get(p + 1, doc[p].get_text()) for p in pages)
     parsed = {q.number for q in questions}
     dil = {int(n) for n in _DIL_Q_MARKER.findall(text)}
     out = []
@@ -517,18 +601,33 @@ def extract_bank(pdf_bytes: bytes) -> BankExtraction:
     try:
         pdf_type = detect_pdf_type(doc)
         warnings: List[str] = []
-        if pdf_type == "scanned":
+        ocr_pages: set = set()
+        if pdf_type in ("scanned", "mixed"):
+            from app.utils.pdf_ocr import ocr_available, scanned_page_indices
+
+            if ocr_available():
+                ocr_pages = {i + 1 for i in scanned_page_indices(doc)}
+        if pdf_type == "scanned" and not ocr_pages:
             return BankExtraction(
                 pdf_type=pdf_type, page_count=doc.page_count, questions=[], answer_key={},
                 warnings=["PDF has no text layer (scanned). Faithful automatic extraction is not "
                           "possible; run the vision pipeline and review every question."],
             )
-        if pdf_type == "mixed":
+        if ocr_pages:
+            warnings.append(
+                f"{len(ocr_pages)} scanned page(s) were read with OCR. OCR can misread words, "
+                "symbols, powers and fractions: check every question, option and answer against "
+                "the PDF before approving."
+            )
+        elif pdf_type == "mixed":
             warnings.append("Some pages have no text layer; questions on them were not extracted.")
-        lines, hbars = _read_lines(doc)
+        lines, hbars = _read_lines(doc, ocr_pages)
         key_pages = _answer_key_pages(lines)
         questions = parse_questions(lines, hbars, key_pages[0] if key_pages else None)
         answer_key = parse_answer_key(pdf_bytes, key_pages)
+        if not answer_key and set(key_pages) & ocr_pages:
+            # A scanned answer-key table has no table structure for pdfplumber.
+            answer_key = _answer_key_from_scans(doc, sorted(set(key_pages) & ocr_pages))
         if not key_pages:
             warnings.append("No answer-key section found.")
         seen = set()
@@ -536,7 +635,10 @@ def extract_bank(pdf_bytes: bytes) -> BankExtraction:
             if q.number in seen:
                 warnings.append(f"Question number Q{q.number} appears more than once.")
             seen.add(q.number)
-        warnings.extend(coverage_warnings(doc, questions, key_pages[0] if key_pages else None))
+        ocr_text = {
+            page: "\n".join(ln.raw for ln in lines if ln.page == page) for page in ocr_pages
+        }
+        warnings.extend(coverage_warnings(doc, questions, key_pages[0] if key_pages else None, ocr_text))
         return BankExtraction(
             pdf_type=pdf_type, page_count=doc.page_count, questions=questions,
             answer_key=answer_key, warnings=warnings,

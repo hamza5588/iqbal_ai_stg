@@ -508,12 +508,30 @@ def extract_text_evidence(pdf_path: str) -> Dict:
 
     print("Extracting TEXT EVIDENCE...")
 
+    # Scanned pages have no text layer: their plain text comes from OCR (when
+    # installed) so the model and the answer-key checks still get text evidence.
+    from app.utils.pdf_ocr import MIN_PAGE_TEXT_CHARS, pdf_page_texts, visible_char_count
+
+    try:
+        ocr_page_texts = pdf_page_texts(str(pdf_path), sort=True)
+    except Exception as ocr_exc:  # noqa: BLE001
+        print(f"OCR for scanned pages skipped: {ocr_exc}")
+        ocr_page_texts = []
+
     document = pymupdf.open(str(pdf_path))
     pages = []
 
     try:
         for page_number, page in enumerate(document, start=1):
             normal_text = page.get_text("text", sort=True)
+            text_source = "text_layer"
+            if (
+                visible_char_count(normal_text) < MIN_PAGE_TEXT_CHARS
+                and page_number <= len(ocr_page_texts)
+                and visible_char_count(ocr_page_texts[page_number - 1]) > visible_char_count(normal_text)
+            ):
+                normal_text = ocr_page_texts[page_number - 1]
+                text_source = "ocr"
             page_dict = page.get_text("dict", sort=True)
             spans = []
 
@@ -558,6 +576,7 @@ def extract_text_evidence(pdf_path: str) -> Dict:
                     "page_width": round(float(page.rect.width), 2),
                     "page_height": round(float(page.rect.height), 2),
                     "plain_text": normal_text,
+                    "text_source": text_source,
                     "spans": spans,
                 }
             )
@@ -1442,6 +1461,13 @@ def _build_hybrid_human_message(
     extra = ""
     if extra_instructions.strip():
         extra = "\n\n" + extra_instructions.strip() + "\n"
+
+    if '"text_source":"ocr"' in text_json or '"text_source": "ocr"' in text_json:
+        extra += (
+            "\nPages whose text_source is \"ocr\" are scans: their plain_text was "
+            "read by OCR and may contain misread characters, symbols or math. "
+            "When it disagrees with the page image, trust the image.\n"
+        )
 
     content = [
         {

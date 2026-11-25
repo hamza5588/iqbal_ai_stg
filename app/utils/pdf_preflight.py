@@ -7,8 +7,9 @@ a specific reason instead of failing minutes later.
 Rejects: decompression bombs, corrupted/unopenable files, password-protected
 files, PDFs with no pages, and scanned/image-only PDFs without a usable text
 layer. A text-based PDF that also contains images or diagrams is accepted.
-None of these upload flows has OCR that runs before the text-layer check in
-`ingest_pdf`, so a scanned file could never be processed anyway.
+Scanned PDFs are accepted only when the caller passes ``allow_scanned=True``:
+RAG lesson/chat ingest does so when Tesseract OCR is installed
+(app/utils/pdf_ocr.py), and reads those pages from their images.
 """
 from __future__ import annotations
 
@@ -98,7 +99,10 @@ def check_decompression_bomb(file_bytes: bytes, max_output_mb: int = 60) -> str:
 
 
 def preflight_check_pdf_inner(
-    file_bytes: bytes, max_scan_pages: int = 25, reject_mostly_scanned: bool = True
+    file_bytes: bytes,
+    max_scan_pages: int = 25,
+    reject_mostly_scanned: bool = True,
+    allow_scanned: bool = False,
 ) -> dict:
     """
     Open the PDF and classify it. Only the first `max_scan_pages` pages are
@@ -109,6 +113,10 @@ def preflight_check_pdf_inner(
     page numbers / headers. Lesson ingest has no OCR, so it uses this. Assessment
     (quiz / diagnostic) uploads pass False: their pipeline can read page images,
     so only PDFs with no text layer at all are rejected there.
+
+    allow_scanned: accept scanned / image-only PDFs (returned with
+    'scanned': True) because the caller's ingest can OCR them
+    (app/utils/pdf_ocr.py). PDFs with neither text nor images are still rejected.
 
     Returns {'ok': True, 'has_images': bool} or
     {'ok': False, 'code': str, 'message': str}.
@@ -154,6 +162,8 @@ def preflight_check_pdf_inner(
         has_images = image_pages > 0
         if not any_text:
             if has_images:
+                if allow_scanned:
+                    return {'ok': True, 'has_images': True, 'scanned': True}
                 return {'ok': False, 'code': 'PDF_SCANNED', 'message': PDF_SCANNED_MESSAGE}
             return {'ok': False, 'code': 'PDF_NO_TEXT', 'message': PDF_NO_TEXT_MESSAGE}
 
@@ -165,6 +175,8 @@ def preflight_check_pdf_inner(
             and image_pages / pages_scanned >= 0.5
             and text_pages / pages_scanned < MIN_TEXT_PAGE_RATIO
         ):
+            if allow_scanned:
+                return {'ok': True, 'has_images': True, 'scanned': True}
             return {'ok': False, 'code': 'PDF_SCANNED', 'message': PDF_SCANNED_MESSAGE}
 
         return {'ok': True, 'has_images': has_images}
@@ -189,6 +201,7 @@ def preflight_check_pdf(
     max_scan_pages: int = 25,
     timeout_seconds: int | None = None,
     reject_mostly_scanned: bool = True,
+    allow_scanned: bool = False,
 ) -> dict:
     """
     Runs `preflight_check_pdf_inner` with a hard wall-clock timeout.
@@ -204,7 +217,9 @@ def preflight_check_pdf(
     box = {}
 
     def _run():
-        box['result'] = preflight_check_pdf_inner(file_bytes, max_scan_pages, reject_mostly_scanned)
+        box['result'] = preflight_check_pdf_inner(
+            file_bytes, max_scan_pages, reject_mostly_scanned, allow_scanned
+        )
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
