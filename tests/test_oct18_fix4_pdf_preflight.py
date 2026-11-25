@@ -384,7 +384,8 @@ def _post_lesson(c, data_bytes):
     )
 
 
-def test_create_lesson_scanned_pdf_rejected_before_processing(lesson_client):
+def test_create_lesson_scanned_pdf_rejected_before_processing_without_ocr(lesson_client, monkeypatch):
+    monkeypatch.setenv("RAG_OCR_ENABLED", "false")
     c, processed = lesson_client
     r = _post_lesson(c, scanned_pdf())
     assert r.status_code == 400
@@ -428,11 +429,23 @@ def test_assessment_label_not_prefixed():
     assert ei.value.public_message == pp.PDF_PASSWORD_PROTECTED_MESSAGE
 
 
-def test_create_lesson_mostly_scanned_still_rejected(lesson_client):
+def test_create_lesson_mostly_scanned_still_rejected_without_ocr(lesson_client, monkeypatch):
+    monkeypatch.setenv("RAG_OCR_ENABLED", "false")
     c, processed = lesson_client
     r = _post_lesson(c, scanned_pdf(pages=4, page_numbers=True))
     assert r.status_code == 400 and r.get_json()["code"] == "PDF_SCANNED"
     assert processed == []
+
+
+def test_create_lesson_scanned_pdf_reaches_processing_with_ocr(lesson_client, monkeypatch):
+    # With OCR installed the scan is accepted; its pages are read in process_file.
+    from app.utils import pdf_ocr
+
+    monkeypatch.setattr(pdf_ocr, "ocr_available", lambda: True)
+    c, processed = lesson_client
+    r = _post_lesson(c, scanned_pdf(pages=4, page_numbers=True))
+    assert r.get_json() == {"error": "stop here"}
+    assert len(processed) == 1
 
 
 def test_rag_ingest_allows_scans_only_when_ocr_is_available():

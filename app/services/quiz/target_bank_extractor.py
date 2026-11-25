@@ -233,9 +233,14 @@ def _merge_ocr_rows(page_lines: List[Line]) -> List[Line]:
     return merged
 
 
-def _read_lines(doc, ocr_pages: Optional[set] = None) -> Tuple[List[Line], Dict[int, list]]:
-    """Lines with span geometry. Pages in ``ocr_pages`` (1-based) are scans read by OCR."""
-    ocr_pages = ocr_pages or set()
+def _read_lines(doc, ocr_dicts: Optional[Dict[int, dict]] = None) -> Tuple[List[Line], Dict[int, list]]:
+    """Lines with span geometry.
+
+    ``ocr_dicts`` maps 1-based scanned page numbers to OCR word boxes in the shape of
+    ``page.get_text("dict")`` (see ``pdf_ocr.ocr_page_dicts``); those pages are read
+    from it instead of their empty text layer.
+    """
+    ocr_dicts = ocr_dicts or {}
     lines: List[Line] = []
     hbars: Dict[int, list] = {}
     for pno in range(doc.page_count):
@@ -253,15 +258,9 @@ def _read_lines(doc, ocr_pages: Optional[set] = None) -> Tuple[List[Line], Dict[
                     if r.height < 1.5 and 2.0 < r.width < width * 0.45:
                         bars.append((r.x0, (r.y0 + r.y1) / 2, r.x1))
         hbars[pno + 1] = bars
-        textpage = None
-        if pno + 1 in ocr_pages:
-            from app.utils.pdf_ocr import ocr_textpage
-
-            textpage = ocr_textpage(page)
-        if textpage is not None:
-            data = page.get_text("dict", sort=False, textpage=textpage)
-        else:
-            data = page.get_text("dict", sort=False)
+        ocr_data = ocr_dicts.get(pno + 1)
+        is_ocr = ocr_data is not None
+        data = ocr_data if is_ocr else page.get_text("dict", sort=False)
         page_start = len(lines)
         for block in data.get("blocks", []):
             for ln in block.get("lines", []):
@@ -270,13 +269,13 @@ def _read_lines(doc, ocr_pages: Optional[set] = None) -> Tuple[List[Line], Dict[
                     continue
                 # OCR word boxes have estimated sizes, so size/baseline-based
                 # superscript detection would invent scripts: keep them normal.
-                kinds = ["normal"] * len(spans_raw) if textpage is not None else classify_spans(spans_raw)
+                kinds = ["normal"] * len(spans_raw) if is_ocr else classify_spans(spans_raw)
                 spans = [
                     Span(text=normalize_glyphs(s["text"]), kind=kind, bbox=tuple(s["bbox"]))
                     for s, kind in zip(spans_raw, kinds)
                 ]
                 lines.append(Line(page=pno + 1, bbox=tuple(ln["bbox"]), spans=spans))
-        if textpage is not None:
+        if is_ocr:
             lines[page_start:] = _merge_ocr_rows(lines[page_start:])
     return lines, hbars
 
@@ -621,7 +620,12 @@ def extract_bank(pdf_bytes: bytes) -> BankExtraction:
             )
         elif pdf_type == "mixed":
             warnings.append("Some pages have no text layer; questions on them were not extracted.")
-        lines, hbars = _read_lines(doc, ocr_pages)
+        ocr_dicts: Dict[int, dict] = {}
+        if ocr_pages:
+            from app.utils.pdf_ocr import ocr_page_dicts
+
+            ocr_dicts = {i + 1: d for i, d in ocr_page_dicts(doc, sorted(p - 1 for p in ocr_pages)).items()}
+        lines, hbars = _read_lines(doc, ocr_dicts)
         key_pages = _answer_key_pages(lines)
         questions = parse_questions(lines, hbars, key_pages[0] if key_pages else None)
         answer_key = parse_answer_key(pdf_bytes, key_pages)

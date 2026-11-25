@@ -124,13 +124,13 @@ def ocr_available() -> bool:
     return bool(tesseract_cmd() and ocr_languages())
 
 
-def _ocr_image(cmd: str, png_bytes: bytes, lang: str, timeout: int, psm: str = "3") -> str:
+def _run_tesseract(cmd: str, png_bytes: bytes, args: List[str], timeout: int) -> str:
     env = dict(os.environ, OMP_THREAD_LIMIT="1")
     kwargs = {}
     if os.name == "nt":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     proc = subprocess.run(
-        [cmd, "stdin", "stdout", "-l", lang, "--psm", str(psm)],
+        [cmd, "stdin", "stdout", *args],
         input=png_bytes,
         capture_output=True,
         timeout=timeout,
@@ -142,6 +142,57 @@ def _ocr_image(cmd: str, png_bytes: bytes, lang: str, timeout: int, psm: str = "
         err = (proc.stderr or b"").decode("utf-8", "replace").strip()
         raise RuntimeError(f"tesseract exit {proc.returncode}: {err[:300]}")
     return (proc.stdout or b"").decode("utf-8", "replace")
+
+
+def _ocr_image(cmd: str, png_bytes: bytes, lang: str, timeout: int, psm: str = "3") -> str:
+    return _run_tesseract(cmd, png_bytes, ["-l", lang, "--psm", str(psm)], timeout)
+
+
+# Tesseract language codes by the script their text is written in. Running every
+# configured language on every page ("eng+urd" on an English page) makes Tesseract
+# both slower and less accurate, so each page gets only the languages of its script.
+_SCRIPT_LANGS = {
+    "Arabic": {"urd", "ara", "fas", "pus", "snd", "uig"},
+    "Latin": {"eng", "fra", "deu", "spa", "ita", "por", "nld"},
+}
+
+
+def _detect_script(cmd: str, png_bytes: bytes, timeout: int) -> Optional[str]:
+    """Page script from Tesseract OSD (``--psm 0``), or None when it cannot tell."""
+    try:
+        out = _run_tesseract(cmd, png_bytes, ["--psm", "0"], timeout)
+    except Exception:  # noqa: BLE001 - e.g. "Too few characters" on sparse pages
+        return None
+    match = re.search(r"^Script:\s*(\S+)", out, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _page_lang(cmd: str, png_bytes: bytes, langs: str, timeout: int) -> str:
+    """Configured languages narrowed to the page's script (all of them if unknown)."""
+    parts = langs.split("+")
+    families = {name for name, codes in _SCRIPT_LANGS.items() if codes & set(parts)}
+    if len(families) < 2 or "osd" not in installed_languages():
+        return langs
+    script = _detect_script(cmd, png_bytes, timeout)
+    own = _SCRIPT_LANGS.get(script or "")
+    if not own:
+        return langs
+    other_scripts = set().union(*(c for n, c in _SCRIPT_LANGS.items() if n != script))
+    if script == "Latin":
+        chosen = [p for p in parts if p not in other_scripts]
+    else:
+        # Keep Latin languages after the page's own: English words and numbers
+        # inside an Urdu page still need to be read.
+        chosen = [p for p in parts if p in own] + [p for p in parts if p not in own]
+    return "+".join(chosen) or langs
+
+
+def _ocr_job(cmd: str, png_bytes: bytes, langs: str, timeout: int, psm: str = "3", tsv: bool = False) -> str:
+    lang = _page_lang(cmd, png_bytes, langs, timeout)
+    args = ["-l", lang, "--psm", str(psm)]
+    if tsv:
+        args.append("tsv")
+    return _run_tesseract(cmd, png_bytes, args, timeout)
 
 
 def _clean_ocr_text(text: str) -> str:
@@ -198,7 +249,13 @@ def _ocr_doc_pages(
     doc,
     page_indices: Sequence[int],
     progress: Optional[ProgressFn] = None,
+    tsv: bool = False,
 ) -> Dict[int, str]:
+    """OCR pages of an open document in parallel: {page_index: text}.
+
+    With ``tsv=True`` the values are Tesseract TSV (word boxes in pixels at
+    ``RAG_OCR_DPI``) instead of plain text.
+    """
     cmd = tesseract_cmd()
     lang = ocr_languages()
     if not cmd or not lang or not page_indices:
@@ -240,7 +297,7 @@ def _ocr_doc_pages(
                 idx = pending.pop(fut)
                 done += 1
                 try:
-                    text = _clean_ocr_text(fut.result())
+                    text = fut.result() if tsv else _clean_ocr_text(fut.result())
                     if text:
                         results[idx] = text
                 except Exception as exc:  # noqa: BLE001
@@ -265,7 +322,7 @@ def _ocr_doc_pages(
                 logger.warning("Could not render page %d for OCR: %s", idx + 1, exc)
                 done += 1
                 continue
-            pending[pool.submit(_ocr_image, cmd, png, lang, page_timeout)] = idx
+            pending[pool.submit(_ocr_job, cmd, png, lang, page_timeout, "3", tsv)] = idx
 
         if pending:
             finished, _ = wait(list(pending))
@@ -381,23 +438,53 @@ def scanned_page_indices(doc, page_texts: Optional[Dict[int, str]] = None) -> Li
     return _scanned_page_indices(doc, page_texts)
 
 
-def ocr_textpage(page):
-    """PyMuPDF TextPage read by Tesseract, for parsers that need word positions.
+def _tsv_to_text_dict(tsv: str, scale: float) -> dict:
+    """Tesseract TSV -> the shape of PyMuPDF ``page.get_text("dict")`` (blocks/lines/spans).
 
-    Use with ``page.get_text("dict", textpage=tp)``. Returns None when OCR is not
-    available or fails, so callers fall back to the normal text layer.
+    Word boxes are converted from image pixels to PDF points with ``scale``; each word
+    is one span (a space is appended to all but the last word of a line).
     """
-    if not ocr_available():
-        return None
-    try:
-        return page.get_textpage_ocr(
-            language=ocr_languages() or "eng",
-            dpi=_env_int("RAG_OCR_DPI", 300, minimum=72),
-            full=True,
+    rows: Dict[Tuple[int, int, int], list] = {}
+    for raw in tsv.splitlines()[1:]:
+        cols = raw.split("\t")
+        if len(cols) < 12 or cols[0] != "5":  # level 5 = word
+            continue
+        text = cols[11]
+        if not text.strip():
+            continue
+        try:
+            left, top, width, height = (float(c) for c in cols[6:10])
+        except ValueError:
+            continue
+        key = (int(cols[2]), int(cols[3]), int(cols[4]))  # block, paragraph, line
+        bbox = (left * scale, top * scale, (left + width) * scale, (top + height) * scale)
+        rows.setdefault(key, []).append({"text": text, "bbox": bbox, "size": height * scale})
+    blocks: Dict[int, list] = {}
+    for (block, _par, _line), words in sorted(rows.items()):
+        words.sort(key=lambda w: w["bbox"][0])
+        for w in words[:-1]:
+            w["text"] += " "
+        bbox = (
+            min(w["bbox"][0] for w in words), min(w["bbox"][1] for w in words),
+            max(w["bbox"][2] for w in words), max(w["bbox"][3] for w in words),
         )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("PyMuPDF OCR failed on page %d: %s", getattr(page, "number", -1) + 1, exc)
-        return None
+        blocks.setdefault(block, []).append({"bbox": bbox, "spans": words})
+    return {"blocks": [{"lines": lines} for _, lines in sorted(blocks.items())]}
+
+
+def ocr_page_dicts(doc, page_indices: Sequence[int]) -> Dict[int, dict]:
+    """OCR word boxes for parsers that need positions: {page_index: get_text("dict")-shaped}.
+
+    Pages are read in parallel, each with the languages of its own script. Pages that
+    fail are left out, so callers fall back to the page's text layer.
+    """
+    if not ocr_available() or not page_indices:
+        return {}
+    scale = 72.0 / _env_int("RAG_OCR_DPI", 300, minimum=72)
+    return {
+        idx: _tsv_to_text_dict(tsv, scale)
+        for idx, tsv in _ocr_doc_pages(doc, page_indices, tsv=True).items()
+    }
 
 
 def ocr_page_text(page, psm: str = "3") -> str:
@@ -414,7 +501,7 @@ def ocr_page_text(page, psm: str = "3") -> str:
         return ""
     try:
         png = page.get_pixmap(dpi=_env_int("RAG_OCR_DPI", 300, minimum=72), colorspace=fitz.csGRAY).tobytes("png")
-        return _clean_ocr_text(_ocr_image(cmd, png, lang, _env_int("RAG_OCR_PAGE_TIMEOUT", 60), psm))
+        return _clean_ocr_text(_ocr_job(cmd, png, lang, _env_int("RAG_OCR_PAGE_TIMEOUT", 60), psm))
     except Exception as exc:  # noqa: BLE001
         logger.warning("OCR failed on page %d: %s", getattr(page, "number", -1) + 1, exc)
         return ""
