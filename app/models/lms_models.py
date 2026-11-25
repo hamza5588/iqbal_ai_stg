@@ -233,7 +233,7 @@ class Assessment(Base):
             name="check_assessment_type",
         ),
         CheckConstraint(
-            "creation_mode IN ('manual','pdf_qa_auto','pdf_ai','mixed')",
+            "creation_mode IN ('manual','pdf_qa_auto','pdf_ai','mixed','pdf_content_generated')",
             name="check_creation_mode",
         ),
         CheckConstraint(

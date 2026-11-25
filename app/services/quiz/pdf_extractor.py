@@ -700,3 +700,18 @@ def pair_questions_answers(extraction: PDFExtractionResult) -> List[QuestionAnsw
             f"Matched {len(pairs)} of {len(extraction.questions)} questions ({missing} unmatched)"
         )
     return pairs
+
+
+def pdf_bytes_to_plain_text(pdf_bytes: bytes) -> str:
+    """Best-effort native text layer (no OCR). Empty for pure image scans.
+
+    Used by diagnostic target ingest (`diagnostic_pdf_service`) before
+    `index_target_questions`.
+    """
+    import fitz
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        return "\n".join((page.get_text() or "") for page in doc)
+    finally:
+        doc.close()

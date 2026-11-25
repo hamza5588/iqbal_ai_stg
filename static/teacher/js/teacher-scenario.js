@@ -145,7 +145,20 @@
         schedulePoll();
       });
     });
-    bind('tdSbaPublish', function () { return act('/assessments/' + d.id + '/publish', 'Published. Students in the class can now answer.'); });
+    bind('tdSbaPublish', async function () {
+      try {
+        await act('/assessments/' + d.id + '/publish', 'Published. Students in the class can now answer.');
+      } catch (e) {
+        var msg = (e && e.message) || '';
+        if (/approve at least one/i.test(msg)) {
+          state.tab = 'questions';
+          render();
+          toast('Open each question below and click Approve (or Approve all drafts), then Publish again.', 'error');
+        } else {
+          throw e;
+        }
+      }
+    });
     bind('tdSbaUnpublish', function () { return act('/assessments/' + d.id + '/unpublish', 'Unpublished.'); });
     bind('tdSbaRelease', function () { return act('/assessments/' + d.id + '/release-results', 'Results released to students.'); });
     if (state.tab === 'setup') renderSetup();
@@ -312,16 +325,38 @@
     var body = $('tdSbaTabBody');
     var ready = d.documents.some(function (x) { return x.is_active && x.doc_type === 'learning' && x.status === 'ready'; });
     var running = d.generation_status === 'running';
+    var drafts = d.items.filter(function (q) { return q.status === 'draft'; });
+    var approved = d.items.filter(function (q) { return q.status === 'approved'; });
     body.innerHTML =
-      '<div class="sba-actions" style="margin-top:0;"><button class="td-btn td-btn-primary" id="tdSbaGenerate"' + (ready && !running ? '' : ' disabled') + '>' +
+      '<div class="sba-warn" style="margin-top:0;">' +
+        '<b>How to publish:</b> 1) Generate questions → 2) Click <b>Approve</b> on each question you want students to see (or <b>Approve all drafts</b>) → 3) Click <b>Publish to class</b> at the top.' +
+        (approved.length ? ' <span class="sba-note">' + approved.length + ' approved.</span>' : ' <b>None approved yet.</b>') +
+      '</div>' +
+      '<div class="sba-actions"><button class="td-btn td-btn-primary" id="tdSbaGenerate"' + (ready && !running ? '' : ' disabled') + '>' +
       (running ? '<i class="fas fa-spinner fa-spin"></i> Generating…' : '<i class="fas fa-wand-magic-sparkles"></i> Generate ' + d.question_count + ' questions') + '</button>' +
+      (drafts.length ? '<button class="td-btn td-btn-green" id="tdSbaApproveAll"><i class="fas fa-check-double"></i> Approve all drafts (' + drafts.length + ')</button>' : '') +
       (ready ? '' : '<span class="sba-note">Upload and process a learning-content PDF first.</span>') +
-      '<span class="sba-note">New questions are drafts. Students only see questions you approve.</span></div>' +
+      '<span class="sba-note">Drafts stay teacher-only until you approve them.</span></div>' +
       (d.generation_error ? '<div class="' + (d.generation_status === 'failed' ? 'sba-err' : 'sba-warn') + '">' + esc(d.generation_error) + '</div>' : '') +
-      '<div id="tdSbaQs" style="margin-top:14px;">' + (d.items.length ? d.items.map(questionCard).join('') : '<p class="sba-note">No questions yet.</p>') + '</div>';
+      '<div id="tdSbaQs" style="margin-top:14px;">' + (d.items.length ? d.items.map(questionCard).join('') : '<p class="sba-note">No questions yet. Click Generate first.</p>') + '</div>';
     bind('tdSbaGenerate', async function () {
       await api('/assessments/' + d.id + '/generate', jsonOpts('POST', {}));
       toast('Generating questions… this can take a minute.');
+      await open(d.id, true);
+    });
+    bind('tdSbaApproveAll', async function () {
+      var btn = $('tdSbaApproveAll');
+      if (btn) btn.disabled = true;
+      var ok = 0;
+      for (var i = 0; i < drafts.length; i++) {
+        try {
+          await api('/questions/' + drafts[i].id, jsonOpts('PUT', { status: 'approved' }));
+          ok += 1;
+        } catch (e) {
+          toast((drafts[i].question_text || 'Question').slice(0, 40) + '…: ' + e.message, 'error');
+        }
+      }
+      toast(ok ? (ok + ' question(s) approved. You can Publish to class now.') : 'No questions approved.');
       await open(d.id, true);
     });
     body.querySelectorAll('[data-q-act]').forEach(function (b) {
@@ -349,7 +384,7 @@
       '<details class="sba-q-meta"><summary>Grading points (teacher-only)</summary><ul class="sba-list">' + (q.evaluation_criteria || []).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul></details>' +
       (issues.length ? '<div class="sba-warn">Quality check: ' + issues.map(esc).join('; ') + '</div>' : '') +
       '<div class="sba-actions">' +
-      (q.status !== 'approved' ? '<button class="td-btn td-btn-green td-btn-sm" data-q="' + q.id + '" data-q-act="approve">Approve</button>' : '') +
+      (q.status !== 'approved' ? '<button class="td-btn td-btn-green td-btn-sm" data-q="' + q.id + '" data-q-act="approve"><i class="fas fa-check"></i> Approve for students</button>' : '<span class="sba-badge sba-b-approved">Approved for students</span>') +
       (q.status !== 'rejected' && !locked ? '<button class="td-btn td-btn-danger-outline td-btn-sm" data-q="' + q.id + '" data-q-act="reject">Reject</button>' : '') +
       (q.status === 'approved' && !locked ? '<button class="td-btn td-btn-outline td-btn-sm" data-q="' + q.id + '" data-q-act="draft">Back to draft</button>' : '') +
       (!locked ? '<button class="td-btn td-btn-outline td-btn-sm" data-q="' + q.id + '" data-q-act="edit">Edit</button>' : '') +
