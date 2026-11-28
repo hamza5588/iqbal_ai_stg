@@ -10,6 +10,7 @@
 
     {% include 'admin/sections/overview.html' %}
     {% include 'admin/sections/users.html' %}
+    {% include 'admin/sections/approvals.html' %}
     {% include 'admin/sections/daily_usage.html' %}
     {% include 'admin/sections/student_groups.html' %}
     {% include 'admin/sections/student_reports.html' %}
@@ -49,7 +50,7 @@
     <script src="{{ url_for('static', filename='lms/lms-core.js') }}?v=20261121ur1"></script>
     <script src="{{ url_for('static', filename='admin/js/daily-usage.js') }}?v=20261022usage3"></script>
     <script src="{{ url_for('static', filename='admin/js/student-reporting.js') }}?v=20261120mergequiz1"></script>
-    <script src="{{ url_for('static', filename='admin/js/admin-dashboard.js') }}?v=20261103reports4"></script>
+    <script src="{{ url_for('static', filename='admin/js/admin-dashboard.js') }}?v=20261128approvals1"></script>
     <script src="{{ url_for('static', filename='admin/lms-admin-diagnostic.js') }}?v=20261112aigp1"></script>
     <script src="{{ url_for('static', filename='admin/admin-theme.js') }}"></script>
 {% endblock %}

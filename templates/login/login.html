@@ -472,6 +472,9 @@
 
     <div class="divider">OR SIGN IN WITH E-MAIL</div>
 
+    {% if notice %}
+    <div id="login-notice" role="status" style="display:block;margin:0 0 14px;padding:12px 14px;border-radius:10px;background:#e8f5e9;border:1px solid #81c784;color:#1b5e20;font-size:14px;line-height:1.45;">{{ notice }}</div>
+    {% endif %}
     <div id="login-error" class="{% if error %}show{% endif %}">
       <span id="login-error-text">{% if error %}{{ error }}{% endif %}</span>
     </div>

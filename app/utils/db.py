@@ -398,6 +398,12 @@ def init_db(app):
                         db.commit()
                         logger.info("is_active column added successfully")
 
+                    if 'approval_status' not in columns:
+                        logger.info("Adding approval_status column to users table...")
+                        db.execute(text("ALTER TABLE users ADD COLUMN approval_status VARCHAR(20) NOT NULL DEFAULT 'approved'"))
+                        db.commit()
+                        logger.info("approval_status column added successfully")
+
                     db.execute(text(
                         "UPDATE users SET full_name = username "
                         "WHERE full_name IS NULL OR TRIM(full_name) = ''"

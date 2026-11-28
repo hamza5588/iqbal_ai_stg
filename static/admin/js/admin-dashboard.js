@@ -86,6 +86,8 @@ function showSection(sectionName) {
         loadDashboardStats();
     } else if (sectionName === 'users') {
         loadUsers();
+    } else if (sectionName === 'approvals') {
+        loadApprovals();
     } else if (sectionName === 'daily-usage') {
         loadDailyUsage();
     } else if (sectionName === 'student-groups') {
@@ -182,6 +184,78 @@ function renderUsersTable(users) {
             </td>
         </tr>`;
     }).join('');
+}
+
+// Account approvals (self-registered accounts wait here until an admin approves them)
+let adApprovalStatus = 'pending';
+
+function adSetApprovalStatus(status) {
+    adApprovalStatus = status;
+    document.querySelectorAll('#adApprovalTabs .ad-stab').forEach(b => {
+        const on = b.dataset.status === status;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', String(on));
+    });
+    loadApprovals();
+}
+
+async function loadApprovals() {
+    const tbody = document.getElementById('approvals-tbody');
+    if (!tbody) return;
+    const seq = loadApprovals._seq = (loadApprovals._seq || 0) + 1;
+    try {
+        const response = await fetch(`/admin/approvals?status=${encodeURIComponent(adApprovalStatus)}`);
+        const data = await response.json();
+        if (seq !== loadApprovals._seq) return;
+        if (!data.success) {
+            showNotification('Error loading approvals: ' + data.error, 'error');
+            return;
+        }
+        const badge = document.getElementById('approvals-pending-count');
+        if (badge) badge.textContent = data.pending_count || '';
+        if (!data.users.length) {
+            tbody.innerHTML = adEmptyRow(7, adApprovalStatus === 'pending' ? 'No accounts waiting for approval' : 'No accounts here', '', { icon: 'fa-user-check' });
+            return;
+        }
+        tbody.innerHTML = data.users.map(u => {
+            const tone = AD_ROLE_TONE[u.role] || 'grey';
+            const when = u.created_at ? new Date(u.created_at + (u.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '';
+            const approveBtn = u.approval_status !== 'approved'
+                ? `<button type="button" onclick="setAccountApproval(${u.id}, 'approve')" class="ad-btn ad-btn-primary ad-btn-sm" title="Approve"><i class="fas fa-check"></i>Approve</button>` : '';
+            const rejectBtn = u.approval_status !== 'rejected'
+                ? `<button type="button" onclick="setAccountApproval(${u.id}, 'reject')" class="ad-btn ad-btn-sm" title="Reject"><i class="fas fa-times"></i>${u.approval_status === 'approved' ? 'Revoke' : 'Reject'}</button>` : '';
+            return `
+            <tr>
+                <td class="id">${u.id}</td>
+                <td><div class="ad-user-cell"><span class="ad-initial ${tone}">${adEsc((u.full_name || u.username || '?').charAt(0).toUpperCase())}</span><span><b>${adEsc(u.full_name || u.username)}</b><br><small class="muted">${adEsc(u.username)}</small></span></div></td>
+                <td>${adEsc(u.school_name || 'Not provided')}</td>
+                <td class="muted">${adEsc(u.useremail)}</td>
+                <td><span class="ad-pill ${tone}">${adEsc(u.role)}</span></td>
+                <td class="muted">${adEsc(when)}</td>
+                <td class="actions">${approveBtn} ${rejectBtn}</td>
+            </tr>`;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading approvals:', error);
+        showNotification('Error loading approvals', 'error');
+    }
+}
+
+async function setAccountApproval(userId, action) {
+    if (action === 'reject' && !confirm('Reject this account? The user will not be able to log in.')) return;
+    try {
+        const response = await fetch(`/admin/users/${userId}/${action}`, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+            showNotification(action === 'approve' ? 'Account approved — the user can now log in.' : 'Account rejected.', 'success');
+            loadApprovals();
+        } else {
+            showNotification('Error: ' + data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error updating approval:', error);
+        showNotification('Error updating approval', 'error');
+    }
 }
 
 // Global Prompt Management

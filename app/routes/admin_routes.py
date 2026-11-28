@@ -247,6 +247,8 @@ def list_users():
                 'class_standard': user.class_standard or '',
                 'medium': user.medium or '',
                 'subscription_tier': user.subscription_tier or 'free',
+                'is_active': bool(user.is_active),
+                'approval_status': user.approval_status or 'approved',
                 'created_at': user.created_at.isoformat() if user.created_at else None
             })
         
@@ -328,6 +330,87 @@ def create_user():
     except Exception as e:
         logger.error(f"Error creating user: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ==================== ACCOUNT APPROVALS ====================
+# Self-registered accounts start approval_status='pending' and is_active=False;
+# they cannot log in until an admin approves them here.
+
+APPROVAL_STATUSES = ('pending', 'approved', 'rejected')
+
+
+@bp.route('/approvals', methods=['GET'])
+@login_required
+@admin_only
+def list_approvals():
+    """List self-registered accounts by approval status (default: pending)."""
+    try:
+        db = get_db()
+        status = request.args.get('status', 'pending')
+        if status not in APPROVAL_STATUSES:
+            return jsonify({'success': False, 'error': 'Invalid status'}), 400
+        users = (db.query(DBUser)
+                 .filter(DBUser.approval_status == status)
+                 .order_by(DBUser.id.desc())
+                 .limit(500).all())
+        pending_count = db.query(DBUser).filter(DBUser.approval_status == 'pending').count()
+        return jsonify({
+            'success': True,
+            'status': status,
+            'pending_count': pending_count,
+            'users': [{
+                'id': u.id,
+                'username': u.username,
+                'full_name': u.full_name or u.username,
+                'school_name': u.school_name or '',
+                'useremail': u.useremail,
+                'role': u.role,
+                'class_standard': u.class_standard or '',
+                'medium': u.medium or '',
+                'is_active': bool(u.is_active),
+                'approval_status': u.approval_status,
+                'created_at': u.created_at.isoformat() if u.created_at else None,
+            } for u in users],
+        })
+    except Exception as e:
+        logger.error(f"Error listing approvals: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _set_approval(user_id, status):
+    db = get_db()
+    try:
+        user = db.query(DBUser).filter(DBUser.id == user_id).first()
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        if user.role == 'admin':
+            return jsonify({'success': False, 'error': 'Admin accounts are not managed here'}), 400
+        user.approval_status = status
+        user.is_active = (status == 'approved')
+        db.commit()
+        logger.info("Admin %s set approval_status=%s for user %s (%s)",
+                    session.get('user_id'), status, user.id, user.useremail)
+        return jsonify({'success': True, 'message': f'Account {status}'})
+    except Exception as e:
+        logger.error(f"Error updating approval for user {user_id}: {str(e)}")
+        db.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/users/<int:user_id>/approve', methods=['POST'])
+@login_required
+@admin_only
+def approve_user(user_id):
+    """Approve a self-registered account so it can log in."""
+    return _set_approval(user_id, 'approved')
+
+
+@bp.route('/users/<int:user_id>/reject', methods=['POST'])
+@login_required
+@admin_only
+def reject_user(user_id):
+    """Reject a self-registered account; it stays unable to log in."""
+    return _set_approval(user_id, 'rejected')
 
 
 @bp.route('/users/<int:user_id>', methods=['GET'])
