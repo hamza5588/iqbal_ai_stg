@@ -9,6 +9,11 @@ from app.models.lms_models import Question
 from app.services.quiz.question_metadata import complete_metadata
 from app.utils.db import get_db
 
+# A printed question number at the start of a line ("Q12." / "12)"). ASCII digits only:
+# ``\d`` also matches math-bold digits such as "𝟐", which these banks use inside
+# typeset fractions ("𝟐) 𝒊"), and those fragments were counted as extra questions.
+QUESTION_START = re.compile(r"(?m)^\s*(?:Q\s*)?([0-9]+)\s*[.)]\s+")
+
 
 def _recover_from_pages(pdf_bytes, full_text, part, missing_numbers, answer_map):
     """Recover unreadable math using compact page evidence and printed answers."""
@@ -34,7 +39,7 @@ def _recover_from_pages(pdf_bytes, full_text, part, missing_numbers, answer_map)
             page_end = offset + len(page_text)
             if page_end > start and offset < end:
                 segment_pages.add(index)
-                numbers = {int(n) for n in re.findall(r"(?m)^\s*(?:Q\s*)?(\d+)\s*[.)]\s+", page_text)}
+                numbers = {int(n) for n in QUESTION_START.findall(page_text)}
                 if numbers & missing_numbers:
                     relevant[index] = numbers & missing_numbers
             offset = page_end + 1
@@ -124,7 +129,7 @@ def extract_target_questions(text, pdf_bytes=None):
             body = part[:key_start.start()] if key_start else part
             parse_text = body + "\nAnswer Key\n" + "\n".join(f"{n}: {a}" for n, a in mappings)
         result = try_native_mcq_harvest(parse_text)
-        expected = len(set(re.findall(r"(?m)^\s*(?:Q\s*)?(\d+)\s*[.)]\s+", parse_text.split("Answer Key")[0])))
+        expected = len({int(n) for n in QUESTION_START.findall(parse_text.split("Answer Key")[0])})
         if not expected and not result:
             continue  # Ordinary study text is context, not an MCQ bank.
         if not result or (expected and len(result[0]) < expected):
@@ -133,7 +138,7 @@ def extract_target_questions(text, pdf_bytes=None):
             from app.services.quiz.mcq_converter import native_mcq_from_pair
             present = set(result[1]) if result else set()
             body, _, answer_key = parse_text.partition("Answer Key")
-            starts = list(re.finditer(r"(?m)^\s*(?:Q\s*)?(\d+)\s*[.)]\s+", body))
+            starts = list(QUESTION_START.finditer(body))
             missing = [body[m.start():starts[i + 1].start() if i + 1 < len(starts) else len(body)]
                        for i, m in enumerate(starts) if int(m.group(1)) not in present]
             questions, numbers = (list(result[0]), list(result[1])) if result else ([], [])

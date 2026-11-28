@@ -1,0 +1,650 @@
+{
+ "2": {
+  "stem": "In the radical expression $\\sqrt[n]{a}$, what is the positive integer n called?"
+ },
+ "3": null,
+ "5": {
+  "stem": "An expression of the form $\\frac{P(x)}{Q(x)}$, where P(x) and Q(x) are polynomials and $Q(x) \\neq 0$, is a:"
+ },
+ "6": {
+  "stem": "An irrational radical of a rational number, denoted as $\\sqrt[n]{a}$ with $a \\in Q$, is defined as a:"
+ },
+ "11": null,
+ "12": {
+  "stem": "The logarithm of a positive number to itself as a base, i.e., $\\log_a(a)$, is always equal to:"
+ },
+ "13": {
+  "stem": "What is the value of $\\log_a 1$, where $a > 0$ and $a \\neq 1$?"
+ },
+ "15": {
+  "stem": "The algebraic expression $\\sqrt{x} + 3$ is:"
+ },
+ "20": {
+  "stem": "What is the exponential form of the radical expression $\\sqrt[5]{x^3}$?",
+  "options": [
+   "$x^{\\frac{5}{3}}$",
+   "$x^{\\frac{3}{5}}$",
+   "$x^{15}$",
+   "$x^{-\\frac{3}{5}}$"
+  ]
+ },
+ "21": {
+  "stem": "What is the radical form of $y^{\\frac{1}{4}}$?",
+  "options": [
+   "$\\sqrt{y^4}$",
+   "$4\\sqrt{y}$",
+   "$\\frac{1}{\\sqrt[4]{y}}$",
+   "$\\sqrt[4]{y}$"
+  ]
+ },
+ "22": {
+  "stem": "In $\\sqrt[7]{64}$, what are the radicand and index respectively?"
+ },
+ "26": {
+  "stem": "Which expression is equivalent to $a^{-m}$, where $a \\neq 0$?",
+  "options": [
+   "$\\frac{1}{a^m}$",
+   "$-a^m$",
+   "$\\frac{m}{a}$",
+   "$(-m)a$"
+  ]
+ },
+ "29": {
+  "stem": "Which exponential statement is equivalent to $\\log_3 81 = 4$?",
+  "options": [
+   "$4^3 = 81$",
+   "$3 \\times 4 = 81$",
+   "$81^{\\frac{1}{3}} = 4$",
+   "$3^4 = 81$"
+  ]
+ },
+ "30": {
+  "stem": "According to the Power Law of Logarithms, $\\log_a(m^n)$ is equal to:",
+  "options": [
+   "$(\\log_a m)^n$",
+   "$n\\log_a m$",
+   "$\\log_a\\left(\\frac{m}{n}\\right)$",
+   "$\\log_a(nm)$"
+  ]
+ },
+ "35": {
+  "options": [
+   "$\\sqrt{7}$",
+   "$3 + \\sqrt{5}$",
+   "$\\sqrt[3]{8}$",
+   "$x^2 + 5$"
+  ]
+ },
+ "36": null,
+ "42": {
+  "stem": "To rationalize $\\frac{1}{\\sqrt{5}+\\sqrt{2}}$, by which expression should the numerator and denominator be multiplied?"
+ },
+ "48": {
+  "options": [
+   "−5",
+   "0",
+   "$\\frac{1}{5}$",
+   "5"
+  ]
+ },
+ "49": {
+  "options": [
+   "−3",
+   "3",
+   "$\\frac{1}{3}$",
+   "$-\\frac{1}{3}$"
+  ]
+ },
+ "53": {
+  "options": [
+   "-a",
+   "$\\frac{1}{a}$",
+   "1",
+   "0"
+  ]
+ },
+ "54": {
+  "options": [
+   "$\\frac{22}{7}$",
+   "√16",
+   "π",
+   "0.333..."
+  ]
+ },
+ "55": {
+  "stem": "What is the radical form of $x^{\\frac{2}{3}}$?",
+  "options": [
+   "$\\sqrt[3]{x^2}$",
+   "$\\sqrt{x^3}$",
+   "$\\sqrt[3]{x}$",
+   "$x^6$"
+  ]
+ },
+ "56": {
+  "stem": "For $z = \\frac{1}{2} - \\left(\\frac{\\sqrt{3}}{2}\\right)i$, what is the real part?",
+  "options": [
+   "$-\\frac{\\sqrt{3}}{2}$",
+   "$\\frac{1}{2}$",
+   "$\\frac{\\sqrt{3}}{2}$",
+   "1"
+  ]
+ },
+ "63": {
+  "stem": "According to the Product Law of Logarithms, $\\log_a(mn)$ equals:",
+  "options": [
+   "$\\log_a m \\cdot \\log_a n$",
+   "$\\log_a m + \\log_a n$",
+   "$\\log_a m - \\log_a n$",
+   "$\\frac{\\log_a m}{\\log_a n}$"
+  ]
+ },
+ "64": {
+  "stem": "According to the Quotient Law of Logarithms, $\\log_a\\left(\\frac{m}{n}\\right)$ equals:",
+  "options": [
+   "$\\log_a m - \\log_a n$",
+   "$\\frac{\\log_a m}{\\log_a n}$",
+   "$\\log_a m + \\log_a n$",
+   "$\\log_a(m - n)$"
+  ]
+ },
+ "68": {
+  "stem": "Which change-of-base formula correctly represents $\\log_b a$?",
+  "options": [
+   "$\\frac{\\log_c a}{\\log_c b}$",
+   "$\\frac{\\log_c b}{\\log_c a}$",
+   "$\\log_c a \\cdot \\log_c b$",
+   "$\\log_c(a - b)$"
+  ]
+ },
+ "71": null,
+ "72": null,
+ "73": {
+  "stem": "After rationalizing the denominator, $\\frac{1}{\\sqrt{x}}$ becomes:"
+ },
+ "74": {
+  "options": [
+   "$a^3 + b^3$",
+   "$a^3 + 3ab + b^3$",
+   "$a^3 + 3a^2b + 3ab^2 + b^3$",
+   "$a^3 - 3a^2b + 3ab^2 - b^3$"
+  ]
+ },
+ "77": {
+  "stem": "Express $x^2 + \\frac{1}{x^2}$ in terms of $\\left(x + \\frac{1}{x}\\right)$.",
+  "options": [
+   "$\\left(x + \\frac{1}{x}\\right)^2 + 2$",
+   "$\\left(x + \\frac{1}{x}\\right)^2 - 2$",
+   "$\\left(x + \\frac{1}{x}\\right)^2$",
+   "$\\left(x + \\frac{1}{x}\\right)^3 - 3$"
+  ]
+ },
+ "78": {
+  "options": [
+   "$2x + 3$",
+   "$\\frac{1}{x} + 2$",
+   "$x^2 - y^2$",
+   "$5x^2y$"
+  ]
+ },
+ "79": {
+  "options": [
+   "$\\frac{[(a+b)^2 + (a-b)^2]}{2}$",
+   "$\\frac{[(a+b)^2 - (a-b)^2]}{4}$",
+   "$(a+b)^2 + (a-b)^2$",
+   "$\\frac{[(a+b)^2 - (a-b)^2]}{2}$"
+  ]
+ },
+ "90": {
+  "stem": "Simplify the numerical exponential expression $\\frac{(2^6 \\times 2^3)}{2^4}$"
+ },
+ "92": {
+  "stem": "Simplify $\\left[\\frac{(x^{-3}y^4)}{(x^2y^{-1})}\\right]^2$.",
+  "options": [
+   "$\\frac{y^{10}}{x^{10}}$",
+   "$\\frac{x^{10}}{y^{10}}$",
+   "$\\frac{y^6}{x^2}$",
+   "$\\frac{x^2}{y^6}$"
+  ]
+ },
+ "98": {
+  "stem": "Simplify $\\frac{5+5i}{1+i}$."
+ },
+ "99": {
+  "options": [
+   "$3 - 4i$",
+   "$\\frac{3}{25} - \\left(\\frac{4}{25}\\right)i$",
+   "$\\frac{3}{7} - \\left(\\frac{4}{7}\\right)i$",
+   "$-\\frac{3}{25} + \\left(\\frac{4}{25}\\right)i$"
+  ]
+ },
+ "100": {
+  "stem": "Simplify $\\sqrt[3]{54x^6}$.",
+  "options": [
+   "$3x^2\\sqrt[3]{2}$",
+   "$2x^2\\sqrt[3]{3}$",
+   "$6x^2$",
+   "$3x\\sqrt[3]{2}$"
+  ]
+ },
+ "103": {
+  "stem": "Find the value of the base x if $\\log_x 81 = 4$:"
+ },
+ "104": {
+  "stem": "Evaluate $\\log_4 2$.",
+  "options": [
+   "2",
+   "8",
+   "1",
+   "$\\frac{1}{2}$"
+  ]
+ },
+ "105": {
+  "stem": "Find x if $\\log_{64} x = -\\frac{2}{3}$.",
+  "options": [
+   "$\\frac{1}{16}$",
+   "$\\frac{1}{8}$",
+   "16",
+   "4"
+  ]
+ },
+ "106": {
+  "stem": "Find x if $\\log_x 8 = \\frac{3}{2}$."
+ },
+ "107": {
+  "stem": "Expand $\\log\\left(\\frac{x^2y^3}{z^4}\\right)$ using logarithm laws.",
+  "options": [
+   "$2\\log x + 3\\log y + 4\\log z$",
+   "$6\\log(xy) - 4\\log z$",
+   "$\\frac{2\\log x \\cdot 3\\log y}{4\\log z}$",
+   "$2\\log x + 3\\log y - 4\\log z$"
+  ]
+ },
+ "108": {
+  "stem": "Condense $3\\log x - 2\\log y$ into a single logarithm.",
+  "options": [
+   "$\\log\\left(\\frac{x^3}{y^2}\\right)$",
+   "$\\log(3x - 2y)$",
+   "$\\log(x^3y^2)$",
+   "$\\frac{\\log x^3}{\\log y^2}$"
+  ]
+ },
+ "116": {
+  "stem": "If $x + \\frac{1}{x} = 3$, find $x^2 + \\frac{1}{x^2}$."
+ },
+ "117": {
+  "stem": "If $x + \\frac{1}{x} = 4$, find $x^3 + \\frac{1}{x^3}$."
+ },
+ "118": {
+  "stem": "If $x - \\frac{1}{x} = 5$, find $x^2 + \\frac{1}{x^2}$."
+ },
+ "119": {
+  "stem": "If $x = 2 + \\sqrt{3}$, find $\\frac{1}{x}$ in simplest surd form."
+ },
+ "120": {
+  "stem": "If $x = 2 + \\sqrt{3}$, find $x + \\frac{1}{x}$."
+ },
+ "122": {
+  "stem": "Rationalize the denominator of $\\frac{1}{\\sqrt{7}-\\sqrt{5}}$.",
+  "options": [
+   "$\\frac{(\\sqrt{7}+\\sqrt{5})}{2}$",
+   "$\\frac{(\\sqrt{7}-\\sqrt{5})}{2}$",
+   "$\\sqrt{7}+\\sqrt{5}$",
+   "$\\frac{(\\sqrt{7}+\\sqrt{5})}{12}$"
+  ]
+ },
+ "123": {
+  "stem": "Rationalize and simplify $\\frac{6}{3-\\sqrt{3}}$.",
+  "options": [
+   "$2 + \\sqrt{3}$",
+   "$3 - \\sqrt{3}$",
+   "$3 + \\sqrt{3}$",
+   "$6(3 + \\sqrt{3})$"
+  ]
+ },
+ "124": {
+  "stem": "Reduce $\\frac{x^2-9}{x^2+5x+6}$ to lowest terms.",
+  "options": [
+   "$\\frac{x-3}{x+2}$",
+   "$\\frac{x+3}{x+2}$",
+   "$\\frac{x-3}{x-2}$",
+   "$\\frac{x+3}{x-2}$"
+  ]
+ },
+ "139": {
+  "stem": "Evaluate $\\frac{(2^5 \\times 3^4)}{6^3}$."
+ },
+ "143": {
+  "stem": "Simplify $\\frac{(5+2i)}{i}$."
+ },
+ "145": {
+  "stem": "Simplify $\\left[\\frac{x^{-3}y^2}{z^{-4}}\\right]^2$.",
+  "options": [
+   "$\\frac{y^4z^8}{x^6}$",
+   "$\\frac{x^6y^4}{z^8}$",
+   "$\\frac{y^4}{(x^6z^8)}$",
+   "$x^6y^4z^8$"
+  ]
+ },
+ "146": null,
+ "147": null,
+ "149": {
+  "stem": "Solve for x: $\\log_x(64) = 3$"
+ },
+ "153": {
+  "stem": "Express $\\log_a x + 2\\log_a y - 3\\log_a z$ as a single logarithm.",
+  "options": [
+   "$\\log_a\\left(\\frac{xy^2}{z^3}\\right)$",
+   "$\\log_a\\left(\\frac{2xy}{3z}\\right)$",
+   "$\\log_a(x + y^2 - z^3)$",
+   "$\\log_a(xy^2z^3)$"
+  ]
+ },
+ "160": {
+  "stem": "If $x + \\frac{1}{x} = 4$, find $x^2 + \\frac{1}{x^2}$."
+ },
+ "161": {
+  "stem": "If $x + \\frac{1}{x} = 3$, find $x^3 + \\frac{1}{x^3}$."
+ },
+ "162": {
+  "stem": "If $x - \\frac{1}{x} = 4$, find $x^3 - \\frac{1}{x^3}$."
+ },
+ "163": {
+  "stem": "Rationalize the denominator of $\\frac{4}{\\sqrt{5}-1}$."
+ },
+ "164": {
+  "stem": "Simplify $\\frac{\\sqrt{3}+1}{\\sqrt{3}-1}$."
+ },
+ "166": {
+  "stem": "Simplify $\\frac{x^2-9}{x^2-5x+6}$.",
+  "options": [
+   "$\\frac{x+3}{x-3}$",
+   "$\\frac{x-3}{x+2}$",
+   "$\\frac{x+3}{x-2}$",
+   "$\\frac{x-3}{x-2}$"
+  ]
+ },
+ "177": null,
+ "178": {
+  "stem": "Simplify $\\sqrt[3]{216x^6y^9}$."
+ },
+ "180": {
+  "stem": "If $\\log_b 2 = 0.35$ and $\\log_b 7 = 0.98$, find $\\log_b 14$."
+ },
+ "181": {
+  "stem": "Simplify $\\frac{1}{3-\\sqrt{8}} - \\frac{1}{\\sqrt{8}-\\sqrt{7}}$."
+ },
+ "182": {
+  "stem": "If $x = 3 + 2\\sqrt{2}$, find $x + \\frac{1}{x}$."
+ },
+ "187": {
+  "stem": "Simplify: $\\frac{4x-1}{2x-2} + \\frac{4x+1}{2x+2}$",
+  "options": [
+   "$\\frac{4x^2-1}{x^2-1}$",
+   "$\\frac{4x^2-x+1}{x^2-1}$",
+   "$\\frac{4x^2+1}{x^2-1}$",
+   "$\\frac{8x}{4x}$"
+  ]
+ },
+ "188": {
+  "stem": "Simplify: $\\frac{1}{x+2} + \\frac{2}{x+3}$",
+  "options": [
+   "$\\frac{3}{2x+5}$",
+   "$\\frac{x+5}{(x+2)(x+3)}$",
+   "$\\frac{3x+5}{(x+2)(x+3)}$",
+   "$\\frac{3x+7}{(x+2)(x+3)}$"
+  ]
+ },
+ "189": {
+  "stem": "Simplify: $\\frac{x-2}{x+3} - \\frac{x+1}{x+6}$",
+  "options": [
+   "$\\frac{12}{(x+3)(x+6)}$",
+   "$\\frac{x^2-12}{(x+3)(x+6)}$",
+   "$\\frac{-15}{(x+3)(x+6)}$",
+   "$\\frac{2x-1}{2x+9}$"
+  ]
+ },
+ "190": {
+  "stem": "Simplify: $\\frac{1}{a+b} - \\frac{1}{a-b}$",
+  "options": [
+   "$\\frac{2b}{a^2-b^2}$",
+   "$\\frac{1}{2a}$",
+   "$\\frac{2a}{a^2-b^2}$",
+   "$\\frac{-2b}{a^2-b^2}$"
+  ]
+ },
+ "191": {
+  "stem": "Simplify into lowest form: $\\frac{x+3}{3y-2x} \\times \\frac{4x^2-9y^2}{xy+3y}$",
+  "options": [
+   "$\\frac{2x-3y}{y}$",
+   "$\\frac{3y-2x}{y}$",
+   "$\\frac{-(2x+3y)}{y}$",
+   "$\\frac{2x+3y}{y}$"
+  ]
+ },
+ "192": {
+  "stem": "Simplify into lowest form: $\\left(\\frac{x^2-1}{x^2+2x+1} \\times \\frac{x+1}{x-1}\\right)$",
+  "options": [
+   "x+1",
+   "x−1",
+   "1",
+   "$\\frac{x-1}{x+1}$"
+  ]
+ },
+ "193": {
+  "stem": "Simplify into lowest form: $\\frac{q^2-25}{q^2-3q} \\div \\frac{q^2+5q}{q^2-9}$",
+  "options": [
+   "$\\frac{(q-5)(q+3)}{q^2}$",
+   "$\\frac{(q+5)(q-3)}{q^2}$",
+   "$\\frac{(q-5)(q-3)}{q^2}$",
+   "$\\frac{q-5}{q-3}$"
+  ]
+ },
+ "194": {
+  "stem": "Simplify into lowest form: $\\frac{4}{z^2-4z-5} \\div \\frac{2}{4z^2-4}$",
+  "options": [
+   "$\\frac{4(z-1)}{z+5}$",
+   "$\\frac{2(z-1)}{z-5}$",
+   "$\\frac{8(z+1)}{z-5}$",
+   "$\\frac{8(z-1)}{z-5}$"
+  ]
+ },
+ "195": {
+  "stem": "Simplify: $\\frac{4y}{y^2-1} - \\frac{y+1}{y-1}$",
+  "options": [
+   "$\\frac{-y^2+2y-1}{y^2-1}$",
+   "$\\frac{y^2+2y+1}{y^2-1}$",
+   "$\\frac{-y^2+4y-1}{y^2-1}$",
+   "$\\frac{y^2-2y+1}{y^2-1}$"
+  ]
+ },
+ "196": {
+  "options": [
+   "$a^m \\times a^n = a^{mn}$",
+   "$a^m \\times a^n = a^{m+n}$",
+   "$a^m \\times a^n = a^{m-n}$",
+   "$a^m \\times a^n = a^{m/n}$"
+  ]
+ },
+ "197": {
+  "stem": "Simplify using the law of exponents: $\\left(\\frac{3}{4}\\right)^5 \times \\left(\\frac{3}{4}\\right)^2$",
+  "options": [
+   "$\\left(\\frac{3}{4}\\right)^{10}$",
+   "$\\left(\\frac{3}{4}\\right)^3$",
+   "$\\left(\\frac{3}{4}\\right)^7$",
+   "$\\left(\\frac{3}{4}\\right)^2$"
+  ]
+ },
+ "200": {
+  "options": [
+   "$\\frac{a^m}{a^n} = a^{m+n}$",
+   "$\\frac{a^m}{a^n} = a^{mn}$",
+   "$\\frac{a^m}{a^n} = a^{m/n}$",
+   "$\\frac{a^m}{a^n} = a^{m-n}$"
+  ]
+ },
+ "201": {
+  "stem": "Simplify the following expression: $\\frac{3^5}{3^2}$"
+ },
+ "202": {
+  "stem": "Simplify the following expression: $\\frac{(a+b)^2(c+d)^3}{(a+b)(c+d)^2}$"
+ },
+ "208": {
+  "options": [
+   "−49",
+   "$\\frac{1}{49}$",
+   "49",
+   "$-\\frac{1}{49}$"
+  ]
+ },
+ "209": {
+  "options": [
+   "$\\frac{b^2}{a^2}$",
+   "$a^2b^2$",
+   "$\\frac{a^2}{b^2}$",
+   "$\\frac{1}{a^2b^2}$"
+  ]
+ },
+ "210": {
+  "stem": "Simplify the following expression, expressing the answer using positive exponents: $\\frac{m^{-2}n^3}{m^4n^{-1}}$",
+  "options": [
+   "$\\frac{m^6}{n^4}$",
+   "$\\frac{n^2}{m^2}$",
+   "$m^2n^4$",
+   "$\\frac{n^4}{m^6}$"
+  ]
+ },
+ "213": null,
+ "214": {
+  "options": [
+   "√16",
+   "$\\frac{7}{8}$",
+   "√11",
+   "0.25"
+  ]
+ },
+ "215": null,
+ "220": {
+  "stem": "For $a \\neq 0$, which expression is equivalent to $\\frac{a^7}{a^3}$?"
+ },
+ "221": {
+  "stem": "Evaluate $\\frac{5^6}{5^4}$"
+ },
+ "222": {
+  "stem": "Simplify $\\frac{18x^7}{(6x^2)}$, where $x \\neq 0$."
+ },
+ "223": {
+  "stem": "Simplify $\\frac{(a^8b^4)}{(a^3b^2)}$, where a, b ≠ 0."
+ },
+ "229": {
+  "stem": "Simplify $\\left(\\frac{2x}{3y}\\right)^2$, where $y \\neq 0$.",
+  "options": [
+   "$\\frac{2x^2}{3y^2}$",
+   "$\\frac{4x^2}{9y^2}$",
+   "$\\frac{4x}{9y}$",
+   "$\\frac{2x}{9y^2}$"
+  ]
+ },
+ "230": {
+  "options": [
+   "$-a^3$",
+   "3a",
+   "$\\frac{1}{(-a^3)}$",
+   "$\\frac{1}{a^3}$"
+  ]
+ },
+ "231": {
+  "stem": "Simplify $\\frac{2x^{-2}}{y^{-1}}$, expressing the answer using positive exponents.",
+  "options": [
+   "$\\frac{2}{(x^2y)}$",
+   "$\\frac{2x^2}{y}$",
+   "$\\frac{2y}{x^2}$",
+   "$\\frac{x^2y}{2}$"
+  ]
+ },
+ "234": {
+  "stem": "The statement $\\log_2\\left(\\frac{1}{8}\\right) = -3$ can be written in exponential form as:",
+  "options": [
+   "$2^3 = \\frac{1}{8}$",
+   "$(-2)^3 = \\frac{1}{8}$",
+   "$8^{-3} = 2$",
+   "$2^{-3} = \\frac{1}{8}$"
+  ]
+ },
+ "235": {
+  "stem": "Find x if $\\log_4 x = \\frac{3}{2}$."
+ },
+ "236": {
+  "stem": "Find x if $\\log_3 x = -2$.",
+  "options": [
+   "9",
+   "−9",
+   "$\\frac{1}{9}$",
+   "$-\\frac{1}{9}$"
+  ]
+ },
+ "237": {
+  "stem": "Evaluate $\\log_4 8$.",
+  "options": [
+   "$\\frac{1}{2}$",
+   "2",
+   "$\\frac{3}{2}$",
+   "3"
+  ]
+ },
+ "240": {
+  "stem": "Evaluate $\\log_3\\left(\\frac{81}{9}\\right)$"
+ },
+ "244": {
+  "stem": "Evaluate $\\log_9 27$ using the change-of-base law.",
+  "options": [
+   "$\\frac{1}{2}$",
+   "2",
+   "$\\frac{3}{2}$",
+   "4"
+  ]
+ },
+ "249": {
+  "stem": "Simplify $\\frac{(x^2-9)}{(x-3)}$, where $x \\neq 3$.",
+  "options": [
+   "$x - 3$",
+   "$\\frac{1}{(x+3)}$",
+   "$x^2 + 3$",
+   "$x + 3$"
+  ]
+ },
+ "250": {
+  "stem": "Reduce $\\frac{(x^2+5x+6)}{(x+2)}$ to its lowest form, where $x \\neq -2$."
+ },
+ "251": {
+  "stem": "Simplify $\\frac{(x^2-4)}{(x^2+4x+4)}$, where $x \\neq -2$.",
+  "options": [
+   "$\\frac{(x+2)}{(x-2)}$",
+   "$x - 2$",
+   "$\\frac{(x^2-2)}{(x+2)}$",
+   "$\\frac{(x-2)}{(x+2)}$"
+  ]
+ },
+ "252": {
+  "stem": "Reduce $\\frac{(3x^2-12x)}{(6x)}$ to its lowest form, where $x \\neq 0$.",
+  "options": [
+   "$\\frac{(x-4)}{2}$",
+   "$\\frac{(x+4)}{2}$",
+   "$x - 4$",
+   "$\\frac{(x-12)}{6}$"
+  ]
+ },
+ "253": null,
+ "254": null,
+ "255": null,
+ "256": null,
+ "257": null,
+ "258": null,
+ "259": null,
+ "260": null,
+ "261": {
+  "stem": "Simplify $\\frac{\\sqrt{50}}{\\sqrt{2}}$"
+ },
+ "262": {
+  "stem": "Evaluate $\\frac{(\\sqrt{18}+\\sqrt{8})}{\\sqrt{2}}$"
+ }
+}

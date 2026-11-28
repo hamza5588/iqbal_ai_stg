@@ -315,3 +315,29 @@ def test_plain_study_pdf_does_not_trigger_question_generation(monkeypatch):
     from app.services.lms.target_question_service import extract_target_questions
     monkeypatch.setattr("app.services.quiz.pdf_extractor._llm_extract_qa", lambda *a: pytest.fail("No MCQs to extract"))
     assert extract_target_questions("Unit 1: Numbers\n1. Definitions\n2. Examples\n3. Summary") == []
+
+
+def test_math_bold_digits_in_fractions_are_not_counted_as_questions(monkeypatch):
+    """DIL SAATHI bank 28-11-2026: typeset fractions put math-bold digits at line
+    starts ("𝟐) 𝒊"); they were counted as extra question numbers (284 of 286)."""
+    from app.services.lms import target_question_service as tq
+
+    def fail(*_a, **_k):
+        raise AssertionError("no LLM recovery expected for a fully readable bank")
+
+    monkeypatch.setattr("app.services.quiz.pdf_extractor._llm_extract_qa", fail)
+    monkeypatch.setattr(tq, "_recover_from_pages", fail)
+    monkeypatch.setattr(tq, "complete_metadata", lambda *a, **k: None)  # metadata is not under test
+    stems = [
+        "For z = 1/2 minus the fraction (√3\n𝟐) 𝒊, what is the real part of z?",
+        "Simplify using the law of exponents: (3\n𝟒) 𝟓 × (3/4) squared, as one power.",
+        "Which number is the additive identity in the set of real numbers?",
+        "Which base is used by common logarithms in everyday calculations?",
+    ]
+    text = "".join(
+        f"Q{i}. {stem}\nA. one\nB. two\nC. three\nD. four\n" for i, stem in enumerate(stems, start=1)
+    ) + "Answer Key\nQ1 A\nQ2 C\nQ3 D\nQ4 C\n"
+    out = tq.extract_target_questions(text)
+    assert sorted(n for _q, n in out) == [1, 2, 3, 4]
+    assert tq.QUESTION_START.findall("𝟐) 𝒊\n2) x\n") == ["2"]
+
