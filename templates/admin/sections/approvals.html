@@ -1,0 +1,33 @@
+{% from 'admin/partials/page_head.html' import page_head %}
+<div id="approvals-section" class="section hidden">
+    {% call page_head('Account Approvals', 'Self-registered accounts cannot log in until you approve them.', icon='fa-user-check') %}
+        <button type="button" onclick="loadApprovals()" class="ad-btn ad-btn-sm"><i class="fas fa-sync-alt"></i>Refresh</button>
+    {% endcall %}
+
+    <div class="ad-subtabs" id="adApprovalTabs" role="tablist" aria-label="Filter by approval status">
+        <button type="button" class="ad-stab active" data-status="pending" role="tab" aria-selected="true" onclick="adSetApprovalStatus('pending')">Pending <span class="ad-count" id="approvals-pending-count"></span></button>
+        <button type="button" class="ad-stab" data-status="approved" role="tab" aria-selected="false" onclick="adSetApprovalStatus('approved')">Approved</button>
+        <button type="button" class="ad-stab" data-status="rejected" role="tab" aria-selected="false" onclick="adSetApprovalStatus('rejected')">Rejected</button>
+    </div>
+
+    <div class="ad-card ad-card-flush">
+        <div class="ad-table-scroll">
+            <table class="ad-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>School</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Registered</th>
+                        <th class="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="approvals-tbody">
+                    <tr><td colspan="7">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

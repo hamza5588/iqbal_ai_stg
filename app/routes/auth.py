@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('auth', __name__)
 
 SELF_REGISTER_ROLES = ('student', 'teacher')
+PENDING_APPROVAL_MSG = ("Your account has been created and is waiting for admin approval. "
+                        "You will be able to log in once an administrator approves it.")
+REJECTED_MSG = "Your account request was not approved. Please contact the administrator."
 MAX_RESET_OTP_ATTEMPTS = 5
 
 
@@ -250,6 +253,7 @@ def register():
                 role=role,
                 full_name=full_name,
                 school_name=school_name,
+                approval_status='pending',
             )
             
             # Mark verification token as used and clean up all tokens for this email
@@ -258,17 +262,10 @@ def register():
             ).update({DBEmailVerificationToken.used: True})
             db.commit()
             
-            # Auto-login and redirect to dashboard (no alert, no login page)
+            # Self-registered accounts wait for admin approval: no auto-login.
+            logger.info("Self-registered account %s (%s) is pending admin approval", user_id, email)
             session.clear()
-            session['user_id'] = user_id
-            session['username'] = username
-            session['full_name'] = full_name
-            session['role'] = role or 'student'
-            session['groq_api_key'] = groq_api_key or ''
-            session.permanent = True
-
-            # Use central helper so role-based landings stay consistent
-            return redirect(get_default_route_by_role(role))
+            return render_template('login/login.html', notice=PENDING_APPROVAL_MSG)
         except ValueError as e:
             logger.error(f"Registration validation error: {str(e)}")
             return render_template('register/register.html', error=str(e))
@@ -304,8 +301,14 @@ def login():
                     len(candidate),
                 )
             if ok and not user.get('is_active', True):
-                logger.warning("Login blocked for deactivated account %s", email)
-                err_msg = "Your account has been deactivated. Please contact your teacher or administrator."
+                status = user.get('approval_status') or 'approved'
+                logger.warning("Login blocked for inactive account %s (approval_status=%s)", email, status)
+                if status == 'pending':
+                    err_msg = PENDING_APPROVAL_MSG
+                elif status == 'rejected':
+                    err_msg = REJECTED_MSG
+                else:
+                    err_msg = "Your account has been deactivated. Please contact your teacher or administrator."
                 if _wants_json():
                     return jsonify({'success': False, 'error': err_msg}), 403
                 return render_template('login/login.html', error=err_msg)
